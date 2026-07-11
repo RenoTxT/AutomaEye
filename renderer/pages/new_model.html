@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>New Model — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'New Model — AI Tools × Rule-based Tools', subtitle: 'AutomaEyes', mode: 'setting', showTotalStatus: false };</script>
+</head>
+<body>
+
+<main>
+    <a class="back" id="backLink">← Project</a>
+    <h1>New Model</h1>
+
+    <div class="card">
+        <div class="section-title">Application-specific AI Tools (pilih 1)</div>
+        <div style="padding:12px">
+            <div class="grid-4" id="aiTiles"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">Rule-based Tools (opsional, kombinasikan dengan AI)</div>
+        <div style="padding:12px">
+            <div class="grid-3" id="addonTiles"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">Model Info</div>
+        <div style="padding:12px">
+            <label>Nama <input type="text" id="modelName" placeholder="mis. ScratchDetector"></label>
+            <label>Kelas (comma-separated) <input type="text" id="classes" value="OK" placeholder="OK, waterspot, scratch, rust"></label>
+        </div>
+    </div>
+
+    <div class="row">
+        <button class="btn primary" onclick="submit()">Create Model</button>
+        <button class="btn" onclick="cancel()">Batal</button>
+    </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+const projectName = param('project');
+document.getElementById('backLink').onclick = () => window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
+
+const AI_TYPES = ['AI Segmentation', 'AI Detection', 'AI Classification', 'AI OCR'];
+const ADDONS = ['Presence Check', 'Scratches', 'GD&T Measurement', 'Positioning', 'Color Inspection', 'Count', 'Character Recognition', '1D Code', '2D Code', 'Calibration'];
+
+let aiType = 'AI Detection';
+let selectedAddons = new Set();
+
+function renderTiles() {
+    document.getElementById('aiTiles').innerHTML = AI_TYPES.map(t =>
+        `<div class="tile ${t === aiType ? 'active' : ''}" onclick="setAI('${esc(t)}')">${esc(t)}</div>`
+    ).join('');
+    document.getElementById('addonTiles').innerHTML = ADDONS.map(a =>
+        `<div class="tile ${selectedAddons.has(a) ? 'active' : ''}" onclick="toggleAddon('${esc(a)}')">${esc(a)}</div>`
+    ).join('');
+}
+function setAI(t) { aiType = t; renderTiles(); }
+function toggleAddon(a) {
+    if (selectedAddons.has(a)) selectedAddons.delete(a); else selectedAddons.add(a);
+    renderTiles();
+}
+
+async function submit() {
+    const name = document.getElementById('modelName').value.trim();
+    const classesStr = document.getElementById('classes').value.trim();
+    if (!name) { alert('Nama wajib'); return; }
+    const classes = classesStr.split(',').map(s => s.trim()).filter(Boolean);
+    if (!classes.length) { alert('Kelas minimal 1'); return; }
+    try {
+        await window.api.createModel(projectName, {
+            name, aiType, addons: Array.from(selectedAddons), classes,
+        });
+        window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
+    } catch (e) { alert('Gagal: ' + e.message); }
+}
+
+function cancel() { window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`); }
+
+renderTiles();
+</script>
+<script src="../js/layout.js"></script>
+</body>
+</html>

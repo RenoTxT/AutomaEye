@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Annotation — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'Annotation Studio', subtitle: 'Label Studio — separate window', mode: 'setting', showTotalStatus: false };</script>
+<style>
+    .annotate-panel {
+        max-width: 800px; margin: 0 auto; padding: 20px;
+        background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+    }
+    .status-badge {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 16px; border-radius: 4px; font-weight: 500;
+        margin: 12px 0;
+    }
+    .status-badge.starting { background: var(--warn); color: white; }
+    .status-badge.running { background: var(--ok); color: white; }
+    .status-badge.stopped { background: var(--muted); color: white; }
+    .status-badge.failed { background: var(--ng); color: white; }
+    .status-dot {
+        width: 10px; height: 10px; border-radius: 50%;
+        background: white; opacity: 0.9;
+    }
+    .status-badge.running .status-dot { animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.4; } }
+    .big-btn {
+        display: block; width: 100%; padding: 14px; font-size: 15px;
+        margin: 12px 0;
+    }
+    .step-list { padding-left: 20px; }
+    .step-list li { margin: 6px 0; }
+    code.path {
+        display: block; padding: 8px; background: var(--panel-alt);
+        border: 1px solid var(--border); border-radius: 3px; margin: 6px 0;
+        word-break: break-all; font-size: 11px;
+    }
+</style>
+</head>
+<body>
+
+<main>
+    <a class="back" id="backLink">← Model Workspace</a>
+
+    <!-- Embedded Label Studio via webview — muncul saat user klik Buka Labeling -->
+    <div id="lsEmbed" style="display:none; position:fixed; inset:60px 0 20px 0; background:#fff; z-index:1000">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 12px; background:var(--panel); border-bottom:1px solid var(--border);">
+            <div>
+                <button class="btn small" onclick="closeEmbed()">← Kembali ke Annotation Studio</button>
+                <button class="btn small" onclick="reloadEmbed()">🔄 Reload</button>
+            </div>
+            <span class="muted" id="embedUrl" style="font-size:11px"></span>
+        </div>
+        <webview id="lsWebview" src="about:blank" style="width:100%; height:calc(100% - 42px); border:0" partition="persist:labelstudio" allowpopups></webview>
+    </div>
+
+    <div class="annotate-panel">
+        <h2 style="margin-top:0">Annotation Studio</h2>
+
+        <div class="status-badge stopped" id="statusBadge">
+            <span class="status-dot"></span>
+            <span id="statusText">Server: Stopped</span>
+        </div>
+
+        <button class="btn primary big-btn" onclick="startServer()" id="startBtn">
+            🚀 Start Label Studio Server
+        </button>
+
+        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">
+            <button class="btn small danger" onclick="stopServer()" id="stopBtn" style="display:none">⏹ Stop Server</button>
+        </div>
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+
+        <h3>🤖 Auto-Setup via API</h3>
+        <p class="muted" style="font-size:12px">Otomatis buat project di Label Studio dengan template sesuai AI Type model:</p>
+        <ul class="muted" style="font-size:12px; padding-left:20px; margin:6px 0">
+            <li><strong>AI Detection</strong> → Object Detection with Bounding Boxes</li>
+            <li><strong>AI Segmentation</strong> → Semantic Segmentation with Polygons</li>
+            <li><strong>AI Classification</strong> → Single-Choice Image Classification</li>
+            <li><strong>AI OCR</strong> → Rectangle + Text Transcription</li>
+        </ul>
+        <p class="muted" style="font-size:12px">Kelas dari model akan otomatis dipakai. Bisa customize lagi di Label Studio → Settings → Labeling Interface.</p>
+
+        <div class="row" id="autoSetupRow">
+            <button class="btn primary" onclick="autoSetup()" id="autoSetupBtn">✨ Auto-Setup Project</button>
+            <button class="btn" onclick="testAuth()">🔑 Test Token</button>
+        </div>
+        <p class="muted" id="autoStatus" style="margin-top:8px; font-size:12px"></p>
+        <p class="muted" style="font-size:11px" id="tokenHint">
+            Token belum di-set. Buka <a href="#" onclick="openSettings()">Settings</a> untuk paste Access Token.
+        </p>
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+
+        <h3>🖊️ Mulai Anotasi</h3>
+        <button class="btn primary big-btn" onclick="startAnnotate()" id="annotateBtn" disabled>
+            🖊️ Buka Halaman Labeling Project
+        </button>
+        <p class="muted" style="font-size:11px">Label Studio akan muncul <strong>di dalam halaman ini</strong> (embedded webview), bukan window terpisah. Klik "← Kembali" di toolbar atas untuk kembali ke panel ini.</p>
+
+        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">
+            <button class="btn small" onclick="openInBrowser()" id="browserBtn" disabled>🏠 Buka Home Label Studio</button>
+            <button class="btn" onclick="syncLabels()" id="syncBtn" disabled>📥 Sync Labels (YOLO)</button>
+        </div>
+
+        <p class="muted" id="hint" style="font-size:11px; margin-top:16px">
+            Label Studio dibuka di jendela Chromium terpisah supaya login/CSRF Django jalan normal
+            (iframe di dalam file:// protocol Electron di-reject Django).
+        </p>
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+
+        <h3>Dataset untuk model ini</h3>
+        <code class="path" id="datasetPath">…</code>
+        <button class="btn small" onclick="openFolder()">📁 Buka Folder Dataset</button>
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+
+        <h3>Alur cepat</h3>
+        <ol class="step-list">
+            <li>Klik <strong>Start &amp; Open Window</strong> di atas — jendela Label Studio muncul.</li>
+            <li>Pertama kali: klik <strong>Sign Up</strong>, buat akun (email + password apa saja, offline).</li>
+            <li><strong>Create Project</strong> → beri nama (misal "Socket Holder 1160").</li>
+            <li>Tab <strong>Data Import</strong> → Upload gambar dari folder dataset (path di atas).</li>
+            <li>Tab <strong>Labeling Setup</strong> → template <em>Object Detection with Bounding Boxes</em>.</li>
+            <li>Tambahkan label kelas: <code>OK</code>, <code>waterspot</code>, <code>scratch</code>, <code>rust</code>, dst.</li>
+            <li>Save → klik <strong>Label All Tasks</strong> → mulai anotasi.</li>
+            <li>Selesai: <strong>Export</strong> → format <em>YOLO with images</em>. Extract, copy folder <code>labels/</code> ke <code>dataset/labels/train/</code>.</li>
+        </ol>
+    </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+const projectName = param('project');
+const modelName = param('model');
+
+document.getElementById('backLink').onclick = () =>
+    window.api.goTo(`model.html?project=${encodeURIComponent(projectName)}&model=${encodeURIComponent(modelName)}`);
+
+function setStatus(cls, text) {
+    const badge = document.getElementById('statusBadge');
+    badge.className = 'status-badge ' + cls;
+    document.getElementById('statusText').textContent = text;
+}
+
+let lsProjectId = null;
+
+async function init() {
+    const dsDir = await window.api.getDatasetDir(projectName, modelName);
+    document.getElementById('datasetPath').textContent = dsDir;
+
+    const cfg = await window.api.getConfig();
+    if (cfg.annotation?.access_token) {
+        document.getElementById('tokenHint').textContent = '✓ Access token sudah di-set';
+        document.getElementById('tokenHint').style.color = 'var(--ok)';
+    }
+
+    const st = await window.api.annotationServerStatus();
+
+    // Coba deteksi project existing. checkExistingLSProject melakukan health-probe
+    // sendiri (getBase() cek /health port 8080-8083), jadi ini juga mendeteksi
+    // server Label Studio yang masih hidup walau handle proses in-memory hilang
+    // sesudah restart app (labelStudioProc = null → status.running = false).
+    const found = await refreshProjectState();
+
+    if (st.running || found) {
+        setStatus('running', st.pid
+            ? `Server: Running (port ${st.port}, PID ${st.pid})`
+            : `Server: Running (port 8080/8081)`);
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'inline-block';
+    }
+}
+
+// Deteksi apakah project sudah ada di Label Studio, lalu enable tombol
+// Labeling / Home / Sync. Dipanggil dari init() DAN sesudah Start Server,
+// supaya tombol tetap ke-enable setelah restart app (bukan cuma sesudah Auto-Setup).
+// Return true kalau project ketemu (berarti server juga reachable).
+async function refreshProjectState() {
+    try {
+        const existing = await window.api.checkExistingLSProject(projectName, modelName);
+        if (existing.found) {
+            lsProjectId = existing.projectId;
+            document.getElementById('annotateBtn').disabled = false;
+            document.getElementById('browserBtn').disabled = false;
+            document.getElementById('syncBtn').disabled = false;
+            document.getElementById('autoStatus').innerHTML =
+                `✓ Project ada di Label Studio (ID ${existing.projectId}). ` +
+                `Tasks: <strong>${existing.taskCount}</strong>, Annotations: <strong>${existing.annotationCount}</strong>.`;
+            return true;
+        }
+    } catch (_) { /* server belum ready atau token invalid */ }
+    return false;
+}
+
+async function startServer() {
+    setStatus('starting', 'Server: Starting… (20-40 detik pertama kali)');
+    document.getElementById('startBtn').disabled = true;
+
+    const res = await window.api.startAnnotationServer();
+    if (!res.started && !res.alreadyRunning) {
+        setStatus('failed', 'Server: FAILED');
+        document.getElementById('autoStatus').innerHTML =
+            `❌ Gagal start: <code>${esc(res.error || 'unknown')}</code>`;
+        document.getElementById('startBtn').disabled = false;
+        return;
+    }
+    setStatus('running', `Server: Running (port 8080/8081)`);
+    document.getElementById('startBtn').style.display = 'none';
+    document.getElementById('stopBtn').style.display = 'inline-block';
+
+    // Sesudah server hidup, deteksi ulang project supaya tombol Labeling/Sync
+    // ke-enable lagi (fix: sebelumnya tetap disabled setelah restart app —
+    // hanya autoSetup() yang meng-enable). Retry karena server butuh beberapa
+    // detik sampai API siap; kalau server sudah jalan (orphan) langsung ketemu.
+    for (let i = 0; i < 8; i++) {
+        if (await refreshProjectState()) break;
+        await new Promise(r => setTimeout(r, 1500));
+    }
+}
+
+async function startAnnotate() {
+    if (!lsProjectId) {
+        alert('Buat project via Auto-Setup dulu.');
+        return;
+    }
+    // Embed Label Studio via webview di halaman ini
+    const st = await window.api.annotationServerStatus();
+    const base = `http://localhost:${st.port || 8080}`;
+    const url = `${base}/projects/${lsProjectId}/data`;
+    const webview = document.getElementById('lsWebview');
+    webview.src = url;
+    document.getElementById('embedUrl').textContent = url;
+    document.getElementById('lsEmbed').style.display = 'block';
+}
+
+function closeEmbed() {
+    document.getElementById('lsEmbed').style.display = 'none';
+    document.getElementById('lsWebview').src = 'about:blank';
+}
+
+function reloadEmbed() {
+    const webview = document.getElementById('lsWebview');
+    if (webview && webview.reload) webview.reload();
+    else webview.src = webview.src;
+}
+
+async function autoSetup() {
+    const cfg = await window.api.getConfig();
+    if (!cfg.annotation?.access_token) {
+        alert('Access token belum di-set. Buka Settings dulu.');
+        openSettings();
+        return;
+    }
+    document.getElementById('autoStatus').textContent = 'Setting up…';
+    document.getElementById('autoSetupBtn').disabled = true;
+    try {
+        const res = await window.api.autoSetupLSProject(projectName, modelName);
+        lsProjectId = res.project.id;
+        const prefix = res.alreadyExists
+            ? `✓ Project sudah ada (ID ${res.project.id}).`
+            : `✓ Project dibuat (ID ${res.project.id}).`;
+        let msg = `${prefix} Found ${res.found} gambar di dataset, uploaded ${res.imported}.`;
+        if (res.errors && res.errors.length > 0) {
+            msg += `<br><br>⚠️ ${res.errors.length} error saat upload:<br>`;
+            msg += res.errors.slice(0, 5).map(e => `<code style="font-size:10px">${esc(e)}</code>`).join('<br>');
+            if (res.errors.length > 5) msg += `<br>...dan ${res.errors.length - 5} lagi`;
+        }
+        msg += `<br><br>✅ Klik <strong>Buka Halaman Labeling Project</strong> di bawah untuk mulai anotasi.`;
+        document.getElementById('autoStatus').innerHTML = msg;
+        // Enable tombol Start Annotate + Sync + Browser
+        document.getElementById('annotateBtn').disabled = false;
+        document.getElementById('browserBtn').disabled = false;
+        document.getElementById('syncBtn').disabled = false;
+    } catch (e) {
+        document.getElementById('autoStatus').innerHTML = `❌ ${esc(e.message)}`;
+    } finally {
+        document.getElementById('autoSetupBtn').disabled = false;
+    }
+}
+
+async function syncLabels() {
+    if (!lsProjectId) {
+        alert('Buat project via Auto-Setup dulu.');
+        return;
+    }
+    document.getElementById('autoStatus').textContent = 'Downloading YOLO export…';
+    try {
+        const res = await window.api.syncFromLS(projectName, modelName, lsProjectId);
+        document.getElementById('autoStatus').innerHTML =
+            `✓ Sync <strong>${res.extracted}</strong> label files ke:<br>` +
+            `<code style="font-size:11px">${esc(res.labelsDir)}</code><br><br>` +
+            `Sekarang model siap di-train. ` +
+            `<button class="btn primary small" onclick="gotoTrain()">🚀 Buka Tab Train →</button>`;
+    } catch (e) {
+        document.getElementById('autoStatus').innerHTML = `❌ ${esc(e.message)}`;
+    }
+}
+
+function gotoTrain() {
+    // Balik ke Model workspace dan trigger switch ke tab Train
+    window.api.goTo(`model.html?project=${encodeURIComponent(projectName)}&model=${encodeURIComponent(modelName)}&tab=train`);
+}
+
+function openSettings() {
+    window.api.goTo('settings.html');
+}
+
+async function testAuth() {
+    document.getElementById('autoStatus').textContent = 'Testing token...';
+    const res = await window.api.testLSAuth();
+    if (res.ok) {
+        document.getElementById('autoStatus').innerHTML = '✓ Token valid, auth berhasil!';
+        return;
+    }
+
+    const err = String(res.error || 'unknown');
+    // "fetch failed" / ECONNREFUSED = server-nya belum jalan, BUKAN token salah.
+    // Jangan salahkan token kalau request-nya saja tidak nyambung.
+    const serverDown = /fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|Failed to fetch|network|socket hang up/i.test(err);
+    if (serverDown) {
+        document.getElementById('autoStatus').innerHTML =
+            `⚠️ Tidak bisa connect ke Label Studio: <code>${esc(err)}</code><br><br>` +
+            `Ini <strong>bukan</strong> masalah token — server-nya belum jalan. ` +
+            `Klik <strong>🚀 Start Label Studio Server</strong> di atas dulu, tunggu badge jadi <em>Server: Running</em> (hijau), baru Test Token lagi.`;
+    } else {
+        document.getElementById('autoStatus').innerHTML =
+            `❌ Auth failed: <code>${esc(err)}</code><br><br>` +
+            `Kalau 401 "Authentication credentials were not provided", token kosong/salah/format beda.<br>` +
+            `Cek Settings → paste ulang token → Save. Coba <strong>Legacy Token</strong> (40-char hex) di Label Studio → Account & Settings → Legacy Token.`;
+    }
+}
+
+async function stopServer() {
+    if (!confirm('Stop Label Studio server?')) return;
+    await window.api.stopAnnotationServer();
+    setStatus('stopped', 'Server: Stopped');
+    document.getElementById('startBtn').style.display = 'block';
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').style.display = 'none';
+    document.getElementById('annotateBtn').disabled = true;
+    document.getElementById('browserBtn').disabled = true;
+    document.getElementById('syncBtn').disabled = true;
+}
+
+async function openInBrowser() {
+    // Sama seperti Start Annotate — embed di halaman ini
+    if (lsProjectId) {
+        await startAnnotate();
+    } else {
+        const st = await window.api.annotationServerStatus();
+        const base = `http://localhost:${st.port || 8080}`;
+        document.getElementById('lsWebview').src = base;
+        document.getElementById('embedUrl').textContent = base;
+        document.getElementById('lsEmbed').style.display = 'block';
+    }
+}
+
+async function openFolder() {
+    await window.api.openDatasetFolder(projectName, modelName);
+}
+
+init();
+</script>
+<script src="../js/layout.js"></script>
+</body>
+</html>

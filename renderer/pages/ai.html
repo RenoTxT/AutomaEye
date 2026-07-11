@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI Assistant — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'AI Assistant', subtitle: 'NVIDIA NIM — Report · Analyze · Chat', mode: 'setting', showTotalStatus: false };</script>
+</head>
+<body>
+
+<main>
+    <a class="back" id="backLink">← Project</a>
+    <h1 id="title">AI Assistant (NVIDIA NIM)</h1>
+
+    <div class="tabs">
+        <div class="tab-headers">
+            <button class="active" onclick="showTab(this,'report')">📄 Report</button>
+            <button onclick="showTab(this,'analyze')">🔍 Analyze NG</button>
+            <button onclick="showTab(this,'chat')">💬 Chat</button>
+        </div>
+
+        <div id="tab-report" class="tab-content">
+            <div class="card">
+                <div class="section-title">Auto-Generate Laporan Harian</div>
+                <div style="padding:12px">
+                    <label>Tanggal <input type="date" id="dateR"></label>
+                    <button class="btn primary" onclick="generateReport()">Generate Report</button>
+                    <p class="muted" id="statusR"></p>
+                </div>
+            </div>
+            <pre class="output" id="reportOut"></pre>
+        </div>
+
+        <div id="tab-analyze" class="tab-content" style="display:none">
+            <div class="card">
+                <div class="section-title">Root Cause Analysis (Six Sigma)</div>
+                <div style="padding:12px">
+                    <label>Tanggal <input type="date" id="dateA"></label>
+                    <button class="btn primary" onclick="analyzeNG()">Analyze NG Pattern</button>
+                    <p class="muted" id="statusA"></p>
+                </div>
+            </div>
+            <pre class="output" id="analysisOut"></pre>
+        </div>
+
+        <div id="tab-chat" class="tab-content" style="display:none">
+            <div class="card">
+                <div class="section-title">Chat dengan AI</div>
+                <div style="padding:12px">
+                    <div id="chatLog" class="chat-log"></div>
+                    <textarea id="chatInput" rows="3" placeholder="Tanya apa saja tentang QC, YOLO, config, dsb."></textarea>
+                    <div class="row">
+                        <button class="btn primary" onclick="sendChat()" id="sendBtn">📤 Send</button>
+                        <button class="btn" onclick="clearChat()">🗑 Clear</button>
+                    </div>
+                    <p class="muted" id="statusC"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+const projectName = param('project');
+document.getElementById('backLink').onclick = () => window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
+document.getElementById('title').textContent = `AI Assistant — ${projectName}`;
+
+const today = new Date().toISOString().slice(0, 10);
+document.getElementById('dateR').value = today;
+document.getElementById('dateA').value = today;
+
+let messages = [{ role: 'system', content: 'You are an expert quality control engineer for a YOLOv11-based visual inspection system. Answer in Bahasa Indonesia unless asked otherwise. Be concise and technical.' }];
+
+function showTab(btn, id) {
+    document.querySelectorAll('.tab-headers button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+    document.getElementById('tab-' + id).style.display = 'block';
+}
+
+async function generateReport() {
+    const date = document.getElementById('dateR').value;
+    document.getElementById('statusR').textContent = 'Loading...';
+    try {
+        const res = await window.api.nvidiaReport(projectName, date);
+        document.getElementById('reportOut').textContent = res.report;
+        document.getElementById('statusR').textContent = '✓ Selesai';
+    } catch (e) {
+        document.getElementById('statusR').textContent = 'Error: ' + e.message;
+    }
+}
+
+async function analyzeNG() {
+    const date = document.getElementById('dateA').value;
+    document.getElementById('statusA').textContent = 'Analyzing...';
+    try {
+        const res = await window.api.nvidiaAnalyze(projectName, date);
+        document.getElementById('analysisOut').textContent = res.analysis;
+        document.getElementById('statusA').textContent = '✓ Selesai';
+    } catch (e) {
+        document.getElementById('statusA').textContent = 'Error: ' + e.message;
+    }
+}
+
+async function sendChat() {
+    const text = document.getElementById('chatInput').value.trim();
+    if (!text) return;
+    messages.push({ role: 'user', content: text });
+    document.getElementById('chatInput').value = '';
+    document.getElementById('sendBtn').disabled = true;
+    document.getElementById('statusC').textContent = 'Thinking...';
+    renderChat();
+    try {
+        const reply = await window.api.nvidiaChat(messages);
+        messages.push({ role: 'assistant', content: reply });
+        renderChat();
+        document.getElementById('statusC').textContent = '';
+    } catch (e) {
+        document.getElementById('statusC').textContent = 'Error: ' + e.message;
+    } finally {
+        document.getElementById('sendBtn').disabled = false;
+    }
+}
+
+function clearChat() { messages = messages.slice(0, 1); renderChat(); }
+
+function renderChat() {
+    document.getElementById('chatLog').innerHTML = messages
+        .filter(m => m.role !== 'system')
+        .map(m => `<div class="msg ${m.role}"><strong>${m.role.toUpperCase()}</strong><div>${esc(m.content)}</div></div>`)
+        .join('');
+    const log = document.getElementById('chatLog');
+    log.scrollTop = log.scrollHeight;
+}
+</script>
+<script src="../js/layout.js"></script>
+</body>
+</html>

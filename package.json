@@ -1,0 +1,20 @@
+{
+  "name": "automaeyes",
+  "version": "0.1.0",
+  "description": "AutomaEyes — Prototipe Sistem Quality Control berbasis YOLOv11 (Electron)",
+  "main": "main.js",
+  "author": "Reno Mardiputra",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.18",
+    "js-yaml": "^4.1.0",
+    "serialport": "^12.0.0"
+  }
+}

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Run — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'Run Workflow', subtitle: 'Live Inspection', mode: 'run', showTotalStatus: true };</script>
+</head>
+<body>
+
+<main>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+        <a class="back" id="backLink">← Project</a>
+        <div class="row">
+            <button class="btn primary" onclick="startCam()" id="startBtn">▶ Start Camera</button>
+            <button class="btn" onclick="capture()" id="captureBtn" disabled>📷 Capture & Inspect</button>
+            <button class="btn danger" onclick="stopCam()" id="stopBtn" disabled>⏹ Stop</button>
+        </div>
+    </div>
+
+    <div class="run-layout">
+        <!-- LEFT: Palette (workflow chain readonly) -->
+        <div class="palette" id="palette"></div>
+
+        <!-- CENTER: Image viewer + filmstrip -->
+        <div class="camera-panel">
+            <div class="image-viewer">
+                <video id="cam" autoplay muted playsinline style="display:none"></video>
+                <img id="snapImg" class="snapshot" style="display:none" />
+                <canvas id="snap" style="display:none"></canvas>
+                <div id="noSignal" style="color:#666">📷 Klik Start Camera</div>
+            </div>
+            <div class="filmstrip" id="filmstrip"></div>
+        </div>
+
+        <!-- RIGHT: Properties / Results -->
+        <div class="results-panel">
+            <div class="results-section">
+                <h4>Step Results</h4>
+                <table class="table">
+                    <thead><tr><th>#</th><th>Model</th><th>Verdict</th><th>Conf</th></tr></thead>
+                    <tbody id="stepRows"><tr><td colspan="4" class="muted">Belum ada hasil</td></tr></tbody>
+                </table>
+            </div>
+            <div class="results-section">
+                <h4>Counter</h4>
+                <div class="counter-grid">
+                    <div class="counter-item"><div class="num" id="totalCount">0</div><div class="lbl">TOTAL</div></div>
+                    <div class="counter-item"><div class="num" id="okCount" style="color:var(--ok)">0</div><div class="lbl">OK</div></div>
+                    <div class="counter-item"><div class="num" id="ngCount" style="color:var(--ng)">0</div><div class="lbl">NG</div></div>
+                </div>
+                <p class="muted" style="margin-top:8px; font-size:11px">Avg cycle: <strong id="avgCycle">-</strong> ms</p>
+                <p class="muted" style="margin-top:4px; font-size:11px">Ok Ratio: <strong id="okRatio">-</strong></p>
+            </div>
+            <div class="results-section" style="border:none">
+                <h4>Info</h4>
+                <p style="font-size:11px" class="muted">NG image: <code>outputs/YYYY-MM-DD/NNN-HHMM.jpg</code></p>
+                <p style="font-size:11px" class="muted">Arduino sinyal: NG="1", OK="0"</p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+const projectName = param('project');
+document.getElementById('backLink').onclick = () => window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
+
+const CATEGORIES = ['Capture', 'Positioning', 'Inspection', 'Communication', 'Options'];
+let stream = null;
+let total = 0, okCount = 0, ngCount = 0, msSum = 0;
+let projectData = null;
+let filmstripItems = [];
+
+async function init() {
+    projectData = await window.api.loadProject(projectName);
+    renderPalette();
+}
+
+function renderPalette(latestResult) {
+    const palette = document.getElementById('palette');
+    const stepMap = {};
+    if (latestResult && latestResult.steps) {
+        latestResult.steps.forEach(s => stepMap[s.stepIndex] = s);
+    }
+    palette.innerHTML = CATEGORIES.map(cat => {
+        const catSteps = (projectData.workflow.steps || []).filter(s => s.category === cat);
+        return `
+            <div class="palette-cat">
+                <div class="palette-header">
+                    <div><span class="cat-icon"></span>${esc(cat)}</div>
+                </div>
+                <div class="palette-body">
+                    ${catSteps.length ? catSteps.map(s => {
+                        const r = stepMap[s.stepIndex];
+                        const cls = r ? (r.verdict === 'OK' ? 'ok' : 'ng') : '';
+                        return `<div class="palette-step">
+                            <span class="step-num">${s.stepIndex}</span>
+                            <span>${esc(s.modelName)}</span>
+                            <span class="verdict-dot ${cls}"></span>
+                        </div>`;
+                    }).join('') : '<div class="palette-empty">(kosong)</div>'}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function startCam() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        const video = document.getElementById('cam');
+        video.srcObject = stream;
+        video.style.display = 'block';
+        document.getElementById('noSignal').style.display = 'none';
+        document.getElementById('snapImg').style.display = 'none';
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('captureBtn').disabled = false;
+        document.getElementById('stopBtn').disabled = false;
+    } catch (e) { alert('Camera error: ' + e.message); }
+}
+
+function stopCam() {
+    stream?.getTracks().forEach(t => t.stop());
+    document.getElementById('cam').style.display = 'none';
+    document.getElementById('noSignal').style.display = 'block';
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('captureBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = true;
+}
+
+async function capture() {
+    const video = document.getElementById('cam');
+    const canvas = document.getElementById('snap');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    // Show snapshot briefly
+    const snapImg = document.getElementById('snapImg');
+    snapImg.src = dataUrl;
+    snapImg.style.display = 'block';
+    video.style.display = 'none';
+
+    try {
+        const result = await window.api.inspect(projectName, dataUrl);
+        renderResult(result, dataUrl);
+    } catch (e) {
+        alert('Inspect error: ' + e.message);
+    }
+
+    // Show video again after 1 sec
+    setTimeout(() => {
+        snapImg.style.display = 'none';
+        video.style.display = 'block';
+    }, 1200);
+}
+
+function renderResult(result, dataUrl) {
+    // Update Total Status via layout.js helper
+    window.setTotalStatus(result.finalVerdict);
+
+    // Update step rows
+    document.getElementById('stepRows').innerHTML = result.steps.map(s => `
+        <tr class="${s.verdict === 'OK' ? 'ok' : 'ng'}">
+            <td>${s.stepIndex}</td>
+            <td>${esc(s.modelName)}</td>
+            <td>${esc(s.verdict)}</td>
+            <td>${(s.confidence || 0).toFixed(2)}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="4" class="muted">Belum ada hasil</td></tr>';
+
+    // Update palette with verdict dots
+    renderPalette(result);
+
+    // Self-learning: tampilkan notifikasi bila hard sample terkumpul
+    const sl = result.selfLearning;
+    let slEl = document.getElementById('slNotice');
+    if (!slEl) {
+        slEl = document.createElement('p');
+        slEl.id = 'slNotice';
+        slEl.className = 'muted';
+        slEl.style.cssText = 'font-size:11px;margin-top:6px';
+        const anchor = document.getElementById('stepRows').closest('table') || document.getElementById('stepRows');
+        anchor.parentNode.insertBefore(slEl, anchor.nextSibling);
+    }
+    if (sl && sl.collected) {
+        slEl.innerHTML = `🧠 Self-learning: hard sample terkumpul untuk <strong>${esc(sl.modelName)}</strong> ` +
+            `(pending ${sl.count})` + (sl.needsRetrain ? ' — <strong style="color:#f59e0b">ambang retrain tercapai, siap retraining</strong>' : '');
+    } else if (sl && sl.reason === 'disabled') {
+        slEl.textContent = '';
+    }
+
+    // Counters
+    total++;
+    if (result.finalVerdict === 'OK') okCount++; else ngCount++;
+    msSum += (result.totalMS || 0);
+    document.getElementById('totalCount').textContent = total;
+    document.getElementById('okCount').textContent = okCount;
+    document.getElementById('ngCount').textContent = ngCount;
+    document.getElementById('avgCycle').textContent = total ? Math.round(msSum / total) : '-';
+    document.getElementById('okRatio').textContent = total ? Math.round((okCount / total) * 100) + '%' : '-';
+
+    // Filmstrip riwayat capture terakhir
+    addFilmstrip(dataUrl, result.finalVerdict);
+}
+
+function addFilmstrip(dataUrl, verdict) {
+    filmstripItems.unshift({ dataUrl, verdict });
+    filmstripItems = filmstripItems.slice(0, 20);
+    const strip = document.getElementById('filmstrip');
+    if (!strip) return;
+    strip.innerHTML = filmstripItems.map(it =>
+        `<div class="film-item ${it.verdict === 'OK' ? 'ok' : 'ng'}" ` +
+        `style="border:2px solid ${it.verdict === 'OK' ? 'var(--ok)' : 'var(--ng)'};` +
+        `border-radius:3px;overflow:hidden;flex:0 0 auto">` +
+        `<img src="${it.dataUrl}" style="height:56px;display:block"></div>`
+    ).join('');
+}
+
+init();
+</script>
+</body>
+</html>

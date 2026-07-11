@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Workflow — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'Palette (Task View)', subtitle: 'AutomaEyes', mode: 'setting', showTotalStatus: false };</script>
+</head>
+<body>
+
+<main>
+    <div class="page-header">
+        <a class="back" id="backLink">← Project</a>
+        <button class="btn primary" onclick="saveWorkflow()">💾 Simpan Workflow</button>
+    </div>
+
+    <div class="workflow-layout">
+        <div class="palette" id="palette"></div>
+        <div class="props" id="props">
+            <div class="props-header">Properties</div>
+            <div class="props-body" id="propsBody">
+                <p class="muted">Pilih step di Palette (kiri) untuk edit properties.</p>
+                <hr style="margin: 12px 0; border: none; border-top: 1px solid var(--border);">
+                <label>Saat step NG pertama:
+                    <select id="onFirstNG">
+                        <option value="stop_and_report">stop_and_report</option>
+                        <option value="continue">continue</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+const projectName = param('project');
+document.getElementById('backLink').onclick = () => window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
+
+const CATEGORIES = ['Capture', 'Positioning', 'Inspection', 'Communication', 'Options'];
+let steps = [];
+let availableModels = [];
+let selectedIdx = -1;
+
+async function init() {
+    const p = await window.api.loadProject(projectName);
+    steps = (p.workflow.steps || []).map(s => ({ ...s }));
+    availableModels = p.models || [];
+    document.getElementById('onFirstNG').value = p.workflow.onFirstNG || 'stop_and_report';
+    render();
+}
+
+function render() {
+    const palette = document.getElementById('palette');
+    palette.innerHTML = CATEGORIES.map(cat => {
+        const catSteps = steps.filter(s => s.category === cat);
+        return `
+            <div class="palette-cat">
+                <div class="palette-header">
+                    <div><span class="cat-icon"></span>${esc(cat)}</div>
+                    <button class="palette-add-btn" onclick="addStep('${esc(cat)}')" title="Tambah step">+</button>
+                </div>
+                <div class="palette-body">
+                    ${catSteps.length ? catSteps.map(s => {
+                        const idx = steps.indexOf(s);
+                        return `<div class="palette-step ${idx === selectedIdx ? 'selected' : ''}" onclick="selectStep(${idx})">
+                            <span class="step-num">${idx + 1}</span>
+                            <span>${esc(s.modelName)}</span>
+                            <span class="verdict-dot"></span>
+                        </div>`;
+                    }).join('') : '<div class="palette-empty">(kosong)</div>'}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    renderProps();
+}
+
+function renderProps() {
+    const body = document.getElementById('propsBody');
+    if (selectedIdx < 0) {
+        body.innerHTML = `<p class="muted">Pilih step di Palette (kiri) untuk edit properties.</p>
+            <hr style="margin:12px 0; border:none; border-top:1px solid var(--border);">
+            <label>Saat step NG pertama:
+                <select id="onFirstNG">
+                    <option value="stop_and_report">stop_and_report</option>
+                    <option value="continue">continue</option>
+                </select>
+            </label>`;
+        return;
+    }
+    const s = steps[selectedIdx];
+    const m = availableModels.find(x => x.name === s.modelName);
+    const trained = m && m.trained ? `mAP=${(m.lastMAP || 0).toFixed(3)}` : 'belum trained';
+    body.innerHTML = `<h3>Step [${selectedIdx + 1}] — ${esc(s.modelName)}</h3>
+        <p class="muted">Type: <strong>${m ? esc(m.type) : '?'}</strong><br>Status: ${trained}</p>
+        <hr style="margin:12px 0; border:none; border-top:1px solid var(--border);">
+        <label>Category
+            <select onchange="updateStep('category', this.value)">
+                ${CATEGORIES.map(c => `<option ${s.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+            </select>
+        </label>
+        <label>Continue on
+            <select onchange="updateStep('continueOn', this.value)">
+                <option ${s.continueOn === 'always' ? 'selected' : ''}>always</option>
+                <option ${s.continueOn === 'on_ok' ? 'selected' : ''}>on_ok</option>
+                <option ${s.continueOn === 'on_ng' ? 'selected' : ''}>on_ng</option>
+            </select>
+        </label>
+        <div class="row">
+            <button class="btn small" onclick="move(-1)">↑ Up</button>
+            <button class="btn small" onclick="move(1)">↓ Down</button>
+            <button class="btn small danger" onclick="removeStep()">🗑 Delete</button>
+        </div>
+        <hr style="margin:12px 0; border:none; border-top:1px solid var(--border);">
+        <label>Saat step NG pertama:
+            <select id="onFirstNG">
+                <option value="stop_and_report">stop_and_report</option>
+                <option value="continue">continue</option>
+            </select>
+        </label>`;
+}
+
+// Pemilih model berbasis modal (prompt() TIDAK didukung di Electron —
+// itu sebabnya tombol + dulu terasa "tidak ada opsi").
+function addStep(cat) {
+    closePicker();
+    const overlay = document.createElement('div');
+    overlay.id = 'modelPicker';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel,#fff);color:var(--text,inherit);border:1px solid var(--border,#ccc);border-radius:8px;padding:18px;min-width:340px;max-width:90%;max-height:80vh;overflow:auto';
+    if (!availableModels.length) {
+        box.innerHTML = `<h3 style="margin-top:0">Tambah step — ${esc(cat)}</h3>
+            <p class="muted">Belum ada model di project ini. Buat &amp; latih model dulu:
+            <strong>Project → + New Model → Dataset → Annotate → Train</strong>. Setelah model ada,
+            model itu bisa dipilih sebagai step di sini.</p>
+            <div class="row" style="justify-content:flex-end"><button class="btn" id="pkClose">Tutup</button></div>`;
+    } else {
+        box.innerHTML = `<h3 style="margin-top:0">Tambah step ke <em>${esc(cat)}</em></h3>
+            <p class="muted">Pilih model AI yang dijalankan pada langkah ini:</p>
+            <div id="pkList" style="display:flex;flex-direction:column;gap:6px;margin:10px 0"></div>
+            <div class="row" style="justify-content:flex-end"><button class="btn" id="pkClose">Tutup</button></div>`;
+    }
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closePicker(); });
+    const closeBtn = box.querySelector('#pkClose');
+    if (closeBtn) closeBtn.onclick = closePicker;
+
+    const list = box.querySelector('#pkList');
+    if (list) {
+        availableModels.forEach(m => {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.style.cssText = 'text-align:left;justify-content:flex-start';
+            btn.innerHTML = `<strong>${esc(m.name)}</strong> ` +
+                `<span class="muted" style="font-size:11px">— ${esc(m.type)}` +
+                `${m.trained ? ' · trained' : ' · belum trained'}</span>`;
+            btn.onclick = () => {
+                steps.push({ modelName: m.name, category: cat, continueOn: 'always' });
+                selectedIdx = steps.length - 1;
+                closePicker();
+                render();
+            };
+            list.appendChild(btn);
+        });
+    }
+}
+
+function closePicker() {
+    const ex = document.getElementById('modelPicker');
+    if (ex) ex.remove();
+}
+
+function selectStep(idx) {
+    selectedIdx = idx;
+    render();
+}
+
+function updateStep(key, value) {
+    if (selectedIdx < 0) return;
+    steps[selectedIdx][key] = value;
+    render();
+}
+
+function move(dir) {
+    if (selectedIdx < 0) return;
+    const ni = selectedIdx + dir;
+    if (ni < 0 || ni >= steps.length) return;
+    const tmp = steps[selectedIdx];
+    steps[selectedIdx] = steps[ni];
+    steps[ni] = tmp;
+    selectedIdx = ni;
+    render();
+}
+
+function removeStep() {
+    if (selectedIdx < 0) return;
+    steps.splice(selectedIdx, 1);
+    selectedIdx = -1;
+    render();
+}
+
+async function saveWorkflow() {
+    const sel = document.getElementById('onFirstNG');
+    const onFirstNG = sel ? sel.value : 'stop_and_report';
+    try {
+        await window.api.saveWorkflow(projectName, steps, onFirstNG);
+        alert('✓ Workflow tersimpan');
+    } catch (e) {
+        alert('Gagal simpan workflow: ' + e.message);
+    }
+}
+
+init();
+</script>
+</body>
+</html>

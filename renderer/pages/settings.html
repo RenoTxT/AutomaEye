@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Settings — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'Global Settings', subtitle: 'Runtime configuration', mode: 'setting', showTotalStatus: false };</script>
+</head>
+<body>
+
+<main>
+    <a class="back" onclick="window.api.goTo('projects.html')">← Projects</a>
+    <h1>Settings</h1>
+
+    <div class="card">
+        <div class="section-title">Inference Parameter</div>
+        <div style="padding:12px">
+            <div class="grid-3">
+                <label>Confidence threshold <input type="number" step="0.01" id="confidence"></label>
+                <label>IoU threshold <input type="number" step="0.01" id="iou"></label>
+                <label>Image size <input type="number" id="imgsz"></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">Python Runtime</div>
+        <div style="padding:12px">
+            <label>Python exe <input type="text" id="pythonExe" placeholder="python atau python3"></label>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">Arduino / Serial (Slide Gate + PLC Signal)</div>
+        <div style="padding:12px">
+            <div class="grid-2">
+                <label>Serial port <input type="text" id="arduinoPort" placeholder="COM3 atau /dev/ttyUSB0"></label>
+                <label>Baud rate <input type="number" id="arduinoBaud"></label>
+                <label>OK signal (byte) <input type="text" id="okSignal"></label>
+                <label>NG signal (byte) <input type="text" id="ngSignal"></label>
+            </div>
+            <label><input type="checkbox" id="signalOnOk"> Kirim sinyal saat OK juga (default hanya NG)</label>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">NVIDIA NIM (AI Assistant)</div>
+        <div style="padding:12px">
+            <p class="muted">API key gratis dari <a href="https://build.nvidia.com" target="_blank">build.nvidia.com</a> — login Google/GitHub, klik Get API Key.</p>
+            <label>API key <input type="password" id="nvidiaKey"></label>
+            <label>Default model <input type="text" id="nvidiaModel"></label>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">Self-Learning / Auto-Calibration</div>
+        <div style="padding:12px">
+            <label><input type="checkbox" id="selfEnabled"> Aktifkan Self-Learning (kumpulkan hard sample saat inspeksi)</label>
+            <div class="row">
+                <label>Retrain setiap N sampel <input type="number" id="retrainN" min="10" step="10" style="width:90px"></label>
+                <label>Zona ragu bawah <input type="number" id="uLow" min="0" max="1" step="0.05" style="width:80px"></label>
+                <label>Zona ragu atas <input type="number" id="uHigh" min="0" max="1" step="0.05" style="width:80px"></label>
+            </div>
+            <label>Self-Learning API key (opsional) <input type="password" id="selfKey"></label>
+            <hr>
+            <label><input type="checkbox" id="calibEnabled"> Aktifkan Auto-Calibration (sweep confidence threshold via F1 pada val set)</label>
+            <label>Auto-Calibration API key (opsional) <input type="password" id="calibKey"></label>
+            <p class="muted" style="font-size:11px">Auto-Calibration dijalankan dari halaman <strong>Model → Train</strong> (tombol "Auto-Calibrate"). Self-Learning berjalan otomatis saat <strong>Run</strong> bila diaktifkan.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">External Annotation Tool (Label Studio)</div>
+        <div style="padding:12px">
+            <label>Command <input type="text" id="annCmd" placeholder="python python/run_label_studio.py start"></label>
+            <label>Label Studio Access Token
+                <input type="password" id="annToken" placeholder="dari LS: avatar → Account & Settings → Access Token">
+            </label>
+            <p class="muted" style="font-size:11px">Cara ambil token: buka Label Studio → klik avatar kanan atas → <strong>Account &amp; Settings</strong> → section <strong>Access Token</strong> → copy. Token ini dipakai untuk auto-setup project via API.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <button class="btn primary" onclick="save()">💾 Save (runtime only)</button>
+    </div>
+    <p class="muted">✓ Save otomatis persist ke <code>config.yaml</code> — akan tetap ada di sesi berikutnya.</p>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+let cfg;
+
+async function load() {
+    cfg = await window.api.getConfig();
+    document.getElementById('confidence').value = cfg.model.confidence;
+    document.getElementById('iou').value = cfg.model.iou;
+    document.getElementById('imgsz').value = cfg.model.imgsz;
+    document.getElementById('pythonExe').value = cfg.python.exe || 'python';
+    document.getElementById('arduinoPort').value = cfg.arduino.port || '';
+    document.getElementById('arduinoBaud').value = cfg.arduino.baud || 9600;
+    document.getElementById('okSignal').value = cfg.arduino.ok_signal || '0\n';
+    document.getElementById('ngSignal').value = cfg.arduino.ng_signal || '1\n';
+    document.getElementById('signalOnOk').checked = !!cfg.arduino.signal_on_ok;
+    document.getElementById('nvidiaKey').value = cfg.nvidia.api_key || '';
+    document.getElementById('nvidiaModel').value = cfg.nvidia.model || 'meta/llama-3.3-70b-instruct';
+    document.getElementById('selfKey').value = cfg.self_learning.api_key || '';
+    document.getElementById('selfEnabled').checked = !!cfg.self_learning.enabled;
+    document.getElementById('retrainN').value = cfg.self_learning.retrain_every_n || 100;
+    document.getElementById('uLow').value = cfg.self_learning.uncertainty_low ?? 0.3;
+    document.getElementById('uHigh').value = cfg.self_learning.uncertainty_high ?? 0.7;
+    document.getElementById('calibKey').value = cfg.auto_calibration.api_key || '';
+    document.getElementById('calibEnabled').checked = !!cfg.auto_calibration.enabled;
+    document.getElementById('annCmd').value = cfg.annotation.command || '';
+    document.getElementById('annToken').value = cfg.annotation.access_token || '';
+}
+
+async function save() {
+    const patch = {
+        model: {
+            ...cfg.model,
+            confidence: parseFloat(document.getElementById('confidence').value),
+            iou: parseFloat(document.getElementById('iou').value),
+            imgsz: parseInt(document.getElementById('imgsz').value),
+        },
+        python: { ...cfg.python, exe: document.getElementById('pythonExe').value || 'python' },
+        arduino: {
+            ...cfg.arduino,
+            port: document.getElementById('arduinoPort').value,
+            baud: parseInt(document.getElementById('arduinoBaud').value) || 9600,
+            ok_signal: document.getElementById('okSignal').value,
+            ng_signal: document.getElementById('ngSignal').value,
+            signal_on_ok: document.getElementById('signalOnOk').checked,
+        },
+        nvidia: {
+            ...cfg.nvidia,
+            api_key: document.getElementById('nvidiaKey').value,
+            model: document.getElementById('nvidiaModel').value,
+        },
+        self_learning: {
+            ...cfg.self_learning,
+            enabled: document.getElementById('selfEnabled').checked,
+            api_key: document.getElementById('selfKey').value,
+            retrain_every_n: parseInt(document.getElementById('retrainN').value) || 100,
+            uncertainty_low: parseFloat(document.getElementById('uLow').value),
+            uncertainty_high: parseFloat(document.getElementById('uHigh').value),
+        },
+        auto_calibration: {
+            ...cfg.auto_calibration,
+            enabled: document.getElementById('calibEnabled').checked,
+            api_key: document.getElementById('calibKey').value,
+        },
+        annotation: {
+            ...cfg.annotation,
+            command: document.getElementById('annCmd').value,
+            access_token: document.getElementById('annToken').value,
+        },
+    };
+    const res = await window.api.setConfig(patch);
+    if (res && !res.__error) cfg = res;
+    const saved = !res || !res.__save || res.__save.ok;
+    alert(saved ? '✓ Settings tersimpan ke config.yaml' : 'Gagal simpan: ' + (res.__save && res.__save.error));
+}
+
+load();
+</script>
+</body>
+</html>

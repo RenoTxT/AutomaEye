@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Projects — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'Project Selection', subtitle: 'AutomaEyes — Socket Holder Quality Control', mode: 'setting', showTotalStatus: false };</script>
+</head>
+<body>
+
+<main>
+    <div class="page-header">
+        <h1>Pilih Project</h1>
+        <button class="btn primary" onclick="toggleNewForm()">+ New Project</button>
+    </div>
+
+    <div id="newForm" class="card" style="display:none">
+        <div class="section-title">Buat Project Baru</div>
+        <div style="padding:12px">
+            <label>Nama<input type="text" id="newName" placeholder="mis. Socket Holder 1160"></label>
+            <label>Deskripsi<textarea id="newDesc" rows="2"></textarea></label>
+            <div class="row">
+                <button class="btn primary" onclick="createProject()">Buat</button>
+                <button class="btn" onclick="toggleNewForm()">Batal</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="list"></div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+async function render() {
+    const projects = await window.api.listProjects();
+    const list = document.getElementById('list');
+    if (!projects.length) {
+        list.innerHTML = '<div class="empty-state"><p>Belum ada project. Klik <strong>+ New Project</strong>.</p></div>';
+        return;
+    }
+    list.innerHTML = '<div class="project-grid">' + projects.map(p => `
+        <div class="project-card" onclick="window.api.goTo('project.html?name=${encodeURIComponent(p.name)}')">
+            <h3>${esc(p.name)}</h3>
+            <p class="muted">${esc(p.description || '(tanpa deskripsi)')}</p>
+            <div class="stats-row">
+                <span>${p.models.length} model(s)</span>
+                <span>${p.workflow.steps.length} step(s)</span>
+                <span>${humanTime(p.updatedAt)}</span>
+            </div>
+        </div>
+    `).join('') + '</div>';
+}
+
+function toggleNewForm() {
+    const f = document.getElementById('newForm');
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function createProject() {
+    const name = document.getElementById('newName').value.trim();
+    const desc = document.getElementById('newDesc').value.trim();
+    if (!name) { alert('Nama wajib'); return; }
+    try {
+        const p = await window.api.createProject(name, desc);
+        window.api.goTo(`project.html?name=${encodeURIComponent(p.name)}`);
+    } catch (e) { alert('Gagal: ' + e.message); }
+}
+
+render();
+</script>
+<script src="../js/layout.js"></script>
+</body>
+</html>

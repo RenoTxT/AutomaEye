@@ -1,0 +1,36 @@
+app:
+  name: AutomaEyes — Socket Holder Inspector
+  version: 0.1.0
+python:
+  exe: python
+  infer_script: python/infer.py
+  train_script: python/train.py
+arduino:
+  port: COM3
+  baud: 9600
+  ok_signal: '0'
+  ng_signal: '1'
+  signal_on_ok: false
+model:
+  confidence: 0.35
+  iou: 0.45
+  imgsz: 640
+nvidia:
+  api_key: ''
+  model: meta/llama-3.3-70b-instruct
+self_learning:
+  enabled: false
+  api_key: ''
+  retrain_every_n: 100
+  uncertainty_low: 0.3
+  uncertainty_high: 0.7
+auto_calibration:
+  enabled: false
+  api_key: ''
+annotation:
+  command: python python/run_label_studio.py start
+  access_token: 0e98a2f26e7f99f8a4747408eeb11efb9b24a28c
+paths:
+  projects_root: projects
+output:
+  save_ok_images: false

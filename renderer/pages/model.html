@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Model — AutomaEyes</title>
+<link rel="stylesheet" href="../css/style.css">
+<script>window.LAYOUT_OPTS = { title: 'Model Workspace', subtitle: 'Dataset · Annotation · Training', mode: 'setting', showTotalStatus: false };</script>
+</head>
+<body>
+
+<main>
+    <a class="back" id="backLink">← Project</a>
+    <div class="page-header">
+        <h1 id="title">…</h1>
+    </div>
+    <div class="meta-row" id="meta"></div>
+
+    <div class="tabs">
+        <div class="tab-headers">
+            <button class="active" onclick="showTab(this,'dataset')">📁 Dataset</button>
+            <button onclick="showTab(this,'annotate')">✏️ Annotation & Augment</button>
+            <button onclick="showTab(this,'train')">🚀 Train</button>
+            <button onclick="showTab(this,'test')">🧪 Test</button>
+        </div>
+
+        <div id="tab-dataset" class="tab-content">
+            <div class="card">
+                <div class="section-title">Dataset Management</div>
+                <div style="padding:12px">
+                    <div class="row">
+                        <button class="btn primary" onclick="upload()">📁 Upload Gambar</button>
+                        <button class="btn" onclick="reload()">🔄 Refresh</button>
+                    </div>
+                    <h4 style="margin-top:12px">Train Set (<span id="imgCount">0</span> gambar)</h4>
+                    <p class="muted" style="font-size:11px; margin:2px 0 6px">Klik kanan gambar untuk menu: Preview · Select · Delete. (dobel-klik = preview)</p>
+                    <div id="selBar" style="display:none; align-items:center; gap:10px; margin:8px 0; padding:6px 10px; background:var(--panel-alt); border:1px solid var(--border); border-radius:6px">
+                        <span id="selCount">0 dipilih</span>
+                        <button class="btn small danger" onclick="deleteSelected()">🗑 Hapus dipilih</button>
+                        <button class="btn small" onclick="clearSelection()">Batal pilih</button>
+                    </div>
+                    <div id="thumbs" class="thumbnails"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-annotate" class="tab-content" style="display:none">
+            <div class="card">
+                <div class="section-title">Annotation (Label Studio embedded)</div>
+                <div style="padding:12px">
+                    <p>Klik tombol di bawah untuk buka Label Studio langsung di dalam aplikasi (embedded). Server jalan di background.</p>
+                    <p class="muted">Pertama kali: buat akun (offline, disimpan lokal) → New Project → Data Import upload gambar dari folder dataset → Labeling Setup pilih Object Detection with Bounding Boxes → set kelas (OK, waterspot, dll) → mulai anotasi.</p>
+                    <div class="row">
+                        <button class="btn primary" onclick="openAnnotStudio()">🖊️ Buka Annotation Studio</button>
+                        <button class="btn" onclick="openFolder()">📁 Buka Folder Dataset</button>
+                        <button class="btn" onclick="checkAnnot()">🔍 Cek Instalasi Label Studio</button>
+                    </div>
+                    <p class="muted" id="annotStatus" style="margin-top:8px"></p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-title">Split Dataset (Train / Val / Test)</div>
+                <div style="padding:12px">
+                    <p class="muted">Langkah <strong>2</strong>: setelah semua gambar dianotasi, bagi gambar <strong>asli</strong> (beserta anotasinya) jadi train / val / test. Geser 2 titik slider untuk atur proporsi. Baru <strong>setelah</strong> ini augmentasi dijalankan — dan hanya untuk <strong>train</strong>.</p>
+                    <div class="tvt">
+                        <div class="tvt-bar" id="tvtBar"></div>
+                        <input type="range" min="0" max="100" value="70" id="thumbA" class="tvt-range" oninput="onSlide('A')">
+                        <input type="range" min="0" max="100" value="90" id="thumbB" class="tvt-range" oninput="onSlide('B')">
+                    </div>
+                    <div class="tvt-legend">
+                        <span><span class="tvt-dot" style="background:#22c55e"></span>Train: <strong id="lblTrain">70%</strong></span>
+                        <span><span class="tvt-dot" style="background:#f59e0b"></span>Val: <strong id="lblVal">20%</strong></span>
+                        <span><span class="tvt-dot" style="background:#3b82f6"></span>Test: <strong id="lblTest">10%</strong></span>
+                    </div>
+                    <div class="row" style="margin-top:12px">
+                        <button class="btn primary" onclick="doSplit()" id="splitBtn">✂️ Split Sekarang</button>
+                        <button class="btn" onclick="doCleanRebuild()" id="rebuildBtn">🧹 Clean &amp; Rebuild + Split</button>
+                    </div>
+                    <p class="muted" style="font-size:11px; margin-top:6px">
+                        <strong>Clean &amp; Rebuild</strong>: hapus semua gambar augmentasi lama + betulkan nama label biar cocok gambar, lalu split. Pakai kalau training bilang "no labels".
+                    </p>
+                    <div class="progress-bar" id="splitBar" style="display:none"><div class="progress-fill" id="splitFill" style="width:0"></div></div>
+                    <p class="muted" id="splitStatus" style="margin-top:8px"></p>
+                    <p class="muted" id="splitCounts" style="font-size:12px"></p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-title">Data Augmentation</div>
+                <div style="padding:12px">
+                    <p class="muted">Generate variasi gambar per opsi (tidak dicampur). Contoh: centang Rotate + Blur, multiplier=2, dari 1 gambar → 4 output baru (2 rotate, 2 blur), gambar asli tetap ada. <strong>Label ikut ditransform otomatis.</strong> Hanya gambar di <em>train</em> yang diaugmentasi.</p>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <p class="muted" style="font-size:11px; margin:0">Preview dari <strong id="sampleName">—</strong></p>
+                        <button class="btn small" onclick="cyclePreview()" id="cycleBtn" style="display:none">🔀 Gambar Lain</button>
+                    </div>
+
+                    <!-- Rotate -->
+                    <div class="aug-row">
+                        <div class="aug-preview"><img class="aug-thumb" id="prevRotate" alt=""></div>
+                        <div class="aug-body">
+                            <label><input type="checkbox" id="augRotate" onchange="toggleAug('Rotate')"> Rotate (±derajat)</label>
+                            <div class="aug-controls" id="ctlRotate" style="display:none">
+                                <input type="range" id="rotateSlider" min="0" max="360" value="15" oninput="syncPair('rotate', this.value)">
+                                <input type="number" id="rotateBox" min="0" max="360" value="15" oninput="syncPair('rotate', this.value)"> °
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Flip Horizontal -->
+                    <div class="aug-row">
+                        <div class="aug-preview"><img class="aug-thumb" id="prevFlipH" alt=""></div>
+                        <div class="aug-body">
+                            <label><input type="checkbox" id="augFlipH" onchange="updatePreview()"> Flip Horizontal (mirror kiri-kanan)</label>
+                        </div>
+                    </div>
+
+                    <!-- Flip Vertical -->
+                    <div class="aug-row">
+                        <div class="aug-preview"><img class="aug-thumb" id="prevFlipV" alt=""></div>
+                        <div class="aug-body">
+                            <label><input type="checkbox" id="augFlipV" onchange="updatePreview()"> Flip Vertical (mirror atas-bawah)</label>
+                        </div>
+                    </div>
+
+                    <!-- Blur -->
+                    <div class="aug-row">
+                        <div class="aug-preview"><img class="aug-thumb" id="prevBlur" alt=""></div>
+                        <div class="aug-body">
+                            <label><input type="checkbox" id="augBlur" onchange="toggleAug('Blur')"> Gaussian blur (sigma)</label>
+                            <div class="aug-controls" id="ctlBlur" style="display:none">
+                                <input type="range" id="blurSlider" min="0.1" max="10" step="0.1" value="2.0" oninput="syncPair('blur', this.value)">
+                                <input type="number" id="blurBox" min="0.1" max="10" step="0.1" value="2.0" oninput="syncPair('blur', this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Exposure -->
+                    <div class="aug-row">
+                        <div class="aug-preview"><img class="aug-thumb" id="prevExposure" alt=""></div>
+                        <div class="aug-body">
+                            <label><input type="checkbox" id="augExposure" onchange="toggleAug('Exposure')"> Exposure (alpha ratio)</label>
+                            <div class="aug-controls" id="ctlExposure" style="display:none">
+                                <input type="range" id="exposureSlider" min="0.5" max="2" step="0.05" value="1.2" oninput="syncPair('exposure', this.value)">
+                                <input type="number" id="exposureBox" min="0.5" max="2" step="0.05" value="1.2" oninput="syncPair('exposure', this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Noise -->
+                    <div class="aug-row">
+                        <div class="aug-preview"><img class="aug-thumb" id="prevNoise" alt=""></div>
+                        <div class="aug-body">
+                            <label><input type="checkbox" id="augNoise" onchange="toggleAug('Noise')"> Gaussian noise (sigma)</label>
+                            <div class="aug-controls" id="ctlNoise" style="display:none">
+                                <input type="range" id="noiseSlider" min="0" max="50" value="8" oninput="syncPair('noise', this.value)">
+                                <input type="number" id="noiseBox" min="0" max="50" value="8" oninput="syncPair('noise', this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr style="margin: 12px 0; border: none; border-top: 1px solid var(--border);">
+                    <label>Multiplier (varian per opsi per gambar) <input type="number" id="augMult" value="2" min="1" max="5" style="max-width:120px"></label>
+
+                    <button class="btn primary" onclick="generateAug()" id="genBtn">Generate</button>
+                    <div class="progress-bar" id="augBar" style="display:none"><div class="progress-fill" id="augFill" style="width:0"></div></div>
+                    <p class="muted" id="augStatus" style="margin-top:8px"></p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-title">Preview Dataset + Anotasi</div>
+                <div style="padding:12px">
+                    <p class="muted">Langkah <strong>4</strong>: cek hasil. Pilih grup untuk lihat gambar + kotak anotasinya (termasuk hasil augmentasi di train) — seperti Roboflow. Pastikan kotaknya pas.</p>
+                    <div class="row" id="galleryTabs" style="margin-bottom:8px">
+                        <button class="btn small" onclick="loadGallery('train')" id="galtrain">🟩 Train</button>
+                        <button class="btn small" onclick="loadGallery('val')" id="galval">🟧 Val</button>
+                        <button class="btn small" onclick="loadGallery('test')" id="galtest">🟦 Test</button>
+                        <button class="btn small" onclick="loadGallery(currentGalSplit)">🔄 Refresh</button>
+                    </div>
+                    <p class="muted" id="galInfo" style="font-size:12px"></p>
+                    <div id="galleryGrid" class="gallery-grid"></div>
+                </div>
+            </div>
+            <style>
+                .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+                .gal-item { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--panel-alt); }
+                .gal-wrap { position: relative; width: 100%; background: #000; line-height: 0; }
+                .gal-wrap img { display: block; width: 100%; height: auto; }
+                .gal-box { position: absolute; border: 2px solid #22c55e; box-sizing: border-box; pointer-events: none; }
+                .gal-box span { position: absolute; top: 0; left: 0; font-size: 9px; line-height: 1.3; background: #22c55e; color: #000; padding: 0 3px; white-space: nowrap; }
+                .gal-cap { font-size: 10px; padding: 3px 5px; word-break: break-all; line-height: 1.3; }
+                .gal-aug-badge { display: inline-block; font-size: 9px; background: var(--warn); color: #fff; border-radius: 2px; padding: 0 4px; margin-left: 4px; }
+            </style>
+
+            <style>
+                .tvt { position: relative; height: 34px; margin: 10px 0 4px; }
+                .tvt-bar { position: absolute; top: 13px; left: 0; right: 0; height: 8px; border-radius: 4px;
+                    background: linear-gradient(to right, #22c55e 0 70%, #f59e0b 70% 90%, #3b82f6 90% 100%); }
+                .tvt-range { position: absolute; top: 0; left: 0; width: 100%; height: 34px; margin: 0;
+                    background: none; -webkit-appearance: none; appearance: none; pointer-events: none; }
+                .tvt-range::-webkit-slider-runnable-track { background: transparent; height: 34px; }
+                .tvt-range::-moz-range-track { background: transparent; }
+                .tvt-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px;
+                    border-radius: 50%; background: #fff; border: 3px solid #2563eb; cursor: pointer; pointer-events: auto; margin-top: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+                .tvt-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff;
+                    border: 3px solid #2563eb; cursor: pointer; pointer-events: auto; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+                .tvt-legend { display: flex; gap: 16px; font-size: 12px; margin-top: 6px; }
+                .tvt-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+            </style>
+            <style>
+                .aug-row {
+                    display: flex; align-items: center; gap: 12px;
+                    padding: 8px 0; border-bottom: 1px dashed var(--border);
+                }
+                .aug-preview {
+                    flex-shrink: 0; width: 90px; height: 70px;
+                    background: #000; border: 1px solid var(--border); border-radius: 3px;
+                    display: flex; align-items: center; justify-content: center; overflow: hidden;
+                }
+                .aug-thumb { max-width: 100%; max-height: 100%; object-fit: contain; }
+                .aug-body { flex: 1; }
+                .aug-body > label { margin-bottom: 4px; }
+                .aug-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+                .aug-controls input[type="range"] { flex: 1; min-width: 100px; }
+                .aug-controls input[type="number"] { max-width: 70px; }
+            </style>
+        </div>
+
+        <div id="tab-train" class="tab-content" style="display:none">
+            <div class="card">
+                <div class="section-title">Import Existing Model (.pt)</div>
+                <div style="padding:12px">
+                    <p>Sudah punya file <code>.pt</code> hasil training? Import langsung ke model ini.</p>
+                    <p class="muted">File akan disalin ke <code>projects/&lt;proj&gt;/models/&lt;name&gt;/weights/best.pt</code>. Model akan otomatis di-mark sebagai trained.</p>
+                    <button class="btn primary" onclick="importPt()">📥 Import file .pt</button>
+                    <p class="muted" id="importStatus" style="margin-top:8px"></p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-title">Hyperparameter</div>
+                <div style="padding:12px">
+                    <div class="grid-2">
+                        <label>Epochs <input type="number" id="epochs"></label>
+                        <label>Batch <input type="number" id="batch"></label>
+                        <label>Image size <input type="number" id="imgsz"></label>
+                        <label>Learning rate <input type="number" step="0.0001" id="lr"></label>
+                    </div>
+                    <div class="row">
+                        <button class="btn primary" onclick="startTrain()">▶ Start Training</button>
+                        <button class="btn" onclick="resumeTrain()" id="resumeBtn" style="display:none" title="Lanjutkan training dari checkpoint terakhir (last.pt)">⏯ Resume Training</button>
+                        <button class="btn danger" onclick="cancelTrain()">⏹ Cancel</button>
+                        <button class="btn" onclick="runCalibrate()" title="Sweep confidence threshold pada val set, pilih F1 terbaik, tulis ke config">🎯 Auto-Calibrate</button>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" id="progress" style="width:0"></div></div>
+                    <p class="muted" id="trainStatus">Idle</p>
+                    <p class="muted" id="calibStatus" style="display:none"></p>
+
+                    <!-- Dashboard training gaya Roboflow -->
+                    <div id="trainDash" style="display:none; margin-top:10px">
+                        <div class="metric-cards">
+                            <div class="mcard accent"><div class="mc-label">F1 Score</div><div class="mc-val" id="cardF1">—</div></div>
+                            <div class="mcard"><div class="mc-label">mAP@50</div><div class="mc-val" id="cardMap">—</div></div>
+                            <div class="mcard"><div class="mc-label">mAP@50-95</div><div class="mc-val" id="cardMap95">—</div></div>
+                            <div class="mcard"><div class="mc-label">Precision</div><div class="mc-val" id="cardP">—</div></div>
+                            <div class="mcard"><div class="mc-label">Recall</div><div class="mc-val" id="cardR">—</div></div>
+                        </div>
+
+                        <div class="chart-box">
+                            <div class="chart-title"><span class="lg-dot" style="background:#7c3aed"></span>mAP
+                                <span class="lg-dot" style="background:#c4b5fd; margin-left:10px"></span><span class="muted" style="font-weight:400">mAP50-95</span>
+                            </div>
+                            <canvas id="chartMap" height="220"></canvas>
+                        </div>
+
+                        <!-- Train vs Validation Loss → deteksi overfitting / underfitting -->
+                        <div class="chart-box">
+                            <div class="chart-title">
+                                <span class="lg-dot" style="background:#7c3aed"></span>Training Loss
+                                <span class="lg-dot" style="background:#f59e0b; margin-left:10px"></span><span class="muted" style="font-weight:400">Validation Loss</span>
+                                <span id="fitVerdict" class="fit-badge" style="margin-left:auto">—</span>
+                            </div>
+                            <canvas id="chartTVLoss" height="220"></canvas>
+                            <p class="muted" id="fitDetail" style="margin:6px 2px 0; font-size:11px; line-height:1.45"></p>
+                        </div>
+
+                        <div class="chart-grid">
+                            <div class="chart-box"><div class="chart-title"><span class="lg-dot" style="background:#7c3aed"></span>Box Loss</div><canvas id="chartBox" height="170"></canvas></div>
+                            <div class="chart-box"><div class="chart-title"><span class="lg-dot" style="background:#7c3aed"></span>Class Loss</div><canvas id="chartCls" height="170"></canvas></div>
+                            <div class="chart-box"><div class="chart-title"><span class="lg-dot" style="background:#7c3aed"></span>DFL Loss</div><canvas id="chartDfl" height="170"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="metrics" id="trainMetrics" style="display:none"></div>
+
+                    <div style="margin-top:10px">
+                        <button class="btn small" onclick="toggleLog()" id="logToggle">📄 Lihat log detail</button>
+                    </div>
+                    <pre id="trainLog" style="display:none; max-height:200px; overflow:auto; background:var(--panel-alt); border:1px solid var(--border); border-radius:3px; padding:8px; font-size:11px; white-space:pre-wrap; margin-top:8px"></pre>
+
+                    <style>
+                        .metric-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:4px 0 6px}
+                        .mcard{background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;padding:10px 12px}
+                        .mcard.accent{border-color:#7c3aed;box-shadow:0 0 0 1px #7c3aed inset}
+                        .mc-label{font-size:11px;color:var(--muted,#8a8f98);margin-bottom:4px}
+                        .mc-val{font-size:22px;font-weight:700}
+                        .chart-box{background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-top:12px}
+                        .chart-title{font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+                        .lg-dot{display:inline-block;width:10px;height:10px;border-radius:2px}
+                        .chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+                        .chart-box canvas{width:100%;display:block}
+                        .fit-badge{font-size:11px;font-weight:600;padding:2px 9px;border-radius:11px;border:1px solid var(--border);white-space:nowrap}
+                    </style>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-test" class="tab-content" style="display:none">
+            <div class="card">
+                <div class="section-title">Test / Evaluasi Model</div>
+                <div style="padding:12px">
+                    <p class="muted">Jalankan model terlatih pada set <strong>test</strong> (atau val/train) untuk mendapat metrik, confusion matrix, kurva, dan prediksi visual. Hasil otomatis disimpan ke folder model (<code>models/&lt;model&gt;/eval/&lt;waktu&gt;</code>).</p>
+                    <div class="row" style="align-items:center; gap:8px">
+                        <label>Split
+                            <select id="evalSplit">
+                                <option value="test">Test</option>
+                                <option value="val">Val</option>
+                                <option value="train">Train</option>
+                            </select>
+                        </label>
+                        <button class="btn primary" onclick="runEval()" id="evalBtn">▶ Jalankan Test</button>
+                        <button class="btn small" onclick="openEvalDir()" id="evalOpenBtn" style="display:none">📁 Buka folder hasil</button>
+                        <button class="btn small" onclick="exportEvalCsv()" id="evalCsvBtn" style="display:none">⬇️ Export CSV</button>
+                    </div>
+                    <p class="muted" id="evalStatus" style="margin-top:8px">Idle</p>
+
+                    <div id="evalDash" style="display:none">
+                        <div class="metric-cards">
+                            <div class="mcard accent"><div class="mc-label">F1 Score</div><div class="mc-val" id="evF1">—</div></div>
+                            <div class="mcard"><div class="mc-label">mAP@50</div><div class="mc-val" id="evMap">—</div></div>
+                            <div class="mcard"><div class="mc-label">mAP@50-95</div><div class="mc-val" id="evMap95">—</div></div>
+                            <div class="mcard"><div class="mc-label">Precision</div><div class="mc-val" id="evP">—</div></div>
+                            <div class="mcard"><div class="mc-label">Recall</div><div class="mc-val" id="evR">—</div></div>
+                        </div>
+
+                        <h4 style="margin-top:14px">Metrik per-kelas</h4>
+                        <table class="table" id="evTable"><thead><tr><th>Kelas</th><th>Precision</th><th>Recall</th><th>mAP@50</th><th>mAP@50-95</th></tr></thead><tbody></tbody></table>
+
+                        <h4 style="margin-top:14px">Grafik</h4>
+                        <div class="eval-plots" id="evPlots"></div>
+
+                        <h4 style="margin-top:14px">Prediksi (<span id="evPredCount">0</span> gambar)</h4>
+                        <div id="evPreds" class="eval-preds"></div>
+                    </div>
+                </div>
+            </div>
+            <style>
+                .eval-plots{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+                .eval-plots figure{margin:0;background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;padding:8px}
+                .eval-plots img{width:100%;display:block;border-radius:4px;background:#fff}
+                .eval-plots figcaption{font-size:11px;color:var(--muted,#8a8f98);margin-top:4px;text-align:center}
+                .eval-preds{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:8px}
+                .eval-preds .gp{border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--panel-alt)}
+                .eval-preds .gp img{width:100%;display:block;background:#000}
+                .eval-preds .cap{font-size:10px;padding:4px 6px;word-break:break-all;line-height:1.35}
+            </style>
+        </div>
+    </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+const projectName = param('project');
+const modelName = param('model');
+let currentModel = null;
+document.getElementById('backLink').onclick = () => window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
+
+function showTab(btn, id) {
+    document.querySelectorAll('.tab-headers button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+    document.getElementById('tab-' + id).style.display = 'block';
+    if (id === 'train') { try { checkResumeState(); } catch (_) {} }
+}
+
+// Auto-switch tab kalau ada query param ?tab=train
+window.addEventListener('DOMContentLoaded', () => {
+    const targetTab = param('tab');
+    if (targetTab) {
+        const btn = document.querySelector(`.tab-headers button[onclick*="'${targetTab}'"]`);
+        if (btn) btn.click();
+    }
+});
+
+async function render() {
+    const p = await window.api.loadProject(projectName);
+    currentModel = p.models.find(m => m.name === modelName);
+    if (!currentModel) { alert('Model not found'); return; }
+    const stats = await window.api.modelStats(projectName, modelName);
+    document.getElementById('title').innerHTML = `${esc(currentModel.name)} <span class="tag">${esc(currentModel.type)}</span>`;
+    document.getElementById('meta').innerHTML = `
+        <span>Kelas: ${currentModel.classes.map(c => `<span class="tag">${esc(c)}</span>`).join('')}</span>
+        <span>Add-ons: ${(currentModel.addons || []).map(a => `<span class="tag">${esc(a)}</span>`).join('') || '—'}</span>
+        <span>Dataset: <strong>${stats.train}</strong> train / <strong>${stats.val || 0}</strong> val / <strong>${stats.test || 0}</strong> test · <strong>${stats.annotated}</strong> anot</span>
+    `;
+    const splitInfo = document.getElementById('splitCounts');
+    if (splitInfo) splitInfo.innerHTML =
+        `Sekarang: <strong>${stats.train}</strong> train · <strong>${stats.val || 0}</strong> val · <strong>${stats.test || 0}</strong> test`;
+
+    document.getElementById('epochs').value = currentModel.training.epochs;
+    document.getElementById('batch').value = currentModel.training.batch;
+    document.getElementById('imgsz').value = currentModel.training.imgsz;
+    document.getElementById('lr').value = currentModel.training.lr;
+
+    if (currentModel.trained) {
+        document.getElementById('trainMetrics').style.display = 'flex';
+        document.getElementById('trainMetrics').innerHTML = `
+            <span>mAP: <strong>${(currentModel.lastMAP || 0).toFixed(3)}</strong></span>
+            <span>P: <strong>${(currentModel.lastPrecision || 0).toFixed(3)}</strong></span>
+            <span>R: <strong>${(currentModel.lastRecall || 0).toFixed(3)}</strong></span>
+            <span>F1: <strong>${(currentModel.lastF1 || 0).toFixed(3)}</strong></span>
+        `;
+    }
+
+    const imgs = await window.api.listImages(projectName, modelName, 'train');
+    currentImages = imgs;
+    selectedImgs.clear();
+    document.getElementById('imgCount').textContent = imgs.length;
+    renderThumbs();
+
+    // Load sample untuk augment preview
+    await loadSampleImage();
+
+    // Refresh gallery grup yang lagi dibuka (auto-update sesudah split/generate)
+    if (document.getElementById('galleryGrid')) loadGallery(currentGalSplit);
+}
+
+// Sub-checkbox untuk Flip juga trigger preview
+document.addEventListener('change', (e) => {
+    if (['flipH', 'flipV'].includes(e.target?.id)) updatePreview();
+});
+
+function reload() { render(); }
+
+async function upload() {
+    const paths = await window.api.pickImageFiles();
+    if (!paths.length) return;
+    const res = await window.api.uploadImages(projectName, modelName, paths);
+    alert(`Uploaded ${res.saved} file`);
+    render();
+}
+
+function openAnnotStudio() {
+    window.api.goTo(`annotate.html?project=${encodeURIComponent(projectName)}&model=${encodeURIComponent(modelName)}`);
+}
+
+async function openFolder() {
+    try {
+        await window.api.openDatasetFolder(projectName, modelName);
+        document.getElementById('annotStatus').textContent = '✓ Folder dataset dibuka di File Explorer';
+    } catch (e) { document.getElementById('annotStatus').textContent = 'Error: ' + e.message; }
+}
+
+async function checkAnnot() {
+    document.getElementById('annotStatus').textContent = 'Checking...';
+    const res = await window.api.checkAnnotationTool();
+    if (res.available) {
+        document.getElementById('annotStatus').innerHTML =
+            `✓ <code>${esc(res.command)}</code> ter-install di: <code>${esc(res.resolvedPath)}</code>`;
+    } else {
+        document.getElementById('annotStatus').innerHTML =
+            `❌ <code>${esc(res.command)}</code> tidak di PATH. Install via: <code>pip install anylabeling</code>. Setelah install, tutup dan buka lagi terminal.`;
+    }
+}
+
+function toggleAug(name) {
+    const cb = document.getElementById('aug' + name);
+    const ctl = document.getElementById('ctl' + name);
+    if (ctl) ctl.style.display = cb.checked ? 'flex' : 'none';
+    updatePreview();
+}
+
+function syncPair(key, val) {
+    const slider = document.getElementById(key + 'Slider');
+    const box = document.getElementById(key + 'Box');
+    if (slider && slider.value != val) slider.value = val;
+    if (box && box.value != val) box.value = val;
+    updatePreview();
+}
+
+// ---- Preview state ----
+let sampleImages = [];
+let sampleIdx = 0;
+
+const AUG_TYPES = ['Rotate', 'FlipH', 'FlipV', 'Blur', 'Exposure', 'Noise'];
+
+async function loadSampleImage() {
+    sampleImages = await window.api.listImages(projectName, modelName, 'train');
+    const cycleBtn = document.getElementById('cycleBtn');
+    const nameEl = document.getElementById('sampleName');
+    if (!sampleImages.length) {
+        if (nameEl) nameEl.textContent = 'belum ada gambar';
+        cycleBtn.style.display = 'none';
+        AUG_TYPES.forEach(t => {
+            const el = document.getElementById('prev' + t);
+            if (el) el.src = '';
+        });
+        return;
+    }
+    cycleBtn.style.display = sampleImages.length > 1 ? '' : 'none';
+    sampleIdx = 0;
+    showSample();
+}
+
+function showSample() {
+    if (!sampleImages.length) return;
+    const s = sampleImages[sampleIdx % sampleImages.length];
+    const src = 'file://' + s.path.replace(/\\/g, '/');
+    AUG_TYPES.forEach(t => {
+        const img = document.getElementById('prev' + t);
+        if (img) img.src = src;
+    });
+    document.getElementById('sampleName').textContent = s.name;
+    updatePreview();
+}
+function cyclePreview() {
+    sampleIdx = (sampleIdx + 1) % sampleImages.length;
+    showSample();
+}
+
+// Preview per-option — tiap thumbnail cuma menampilkan efek augmentasi-nya sendiri
+function updatePreview() {
+    // Rotate
+    const rotEl = document.getElementById('prevRotate');
+    if (rotEl) {
+        const deg = document.getElementById('augRotate')?.checked
+            ? parseFloat(document.getElementById('rotateBox').value) || 0 : 0;
+        rotEl.style.transform = `rotate(${deg}deg)`;
+        rotEl.style.filter = '';
+        rotEl.style.opacity = document.getElementById('augRotate')?.checked ? 1 : 0.4;
+    }
+
+    // Flip Horizontal
+    const flipHEl = document.getElementById('prevFlipH');
+    if (flipHEl) {
+        const on = document.getElementById('augFlipH')?.checked;
+        flipHEl.style.transform = on ? 'scaleX(-1)' : '';
+        flipHEl.style.filter = '';
+        flipHEl.style.opacity = on ? 1 : 0.4;
+    }
+
+    // Flip Vertical
+    const flipVEl = document.getElementById('prevFlipV');
+    if (flipVEl) {
+        const on = document.getElementById('augFlipV')?.checked;
+        flipVEl.style.transform = on ? 'scaleY(-1)' : '';
+        flipVEl.style.filter = '';
+        flipVEl.style.opacity = on ? 1 : 0.4;
+    }
+
+    // Blur (sigma-based, decimal support)
+    const blurEl = document.getElementById('prevBlur');
+    if (blurEl) {
+        const sigma = document.getElementById('augBlur')?.checked
+            ? parseFloat(document.getElementById('blurBox').value) || 0 : 0;
+        blurEl.style.transform = '';
+        blurEl.style.filter = `blur(${sigma}px)`;
+        blurEl.style.opacity = document.getElementById('augBlur')?.checked ? 1 : 0.4;
+    }
+
+    // Exposure
+    const expEl = document.getElementById('prevExposure');
+    if (expEl) {
+        const alpha = document.getElementById('augExposure')?.checked
+            ? parseFloat(document.getElementById('exposureBox').value) || 1 : 1;
+        expEl.style.transform = '';
+        expEl.style.filter = `brightness(${alpha})`;
+        expEl.style.opacity = document.getElementById('augExposure')?.checked ? 1 : 0.4;
+    }
+
+    // Noise (approximate via contrast)
+    const noiseEl = document.getElementById('prevNoise');
+    if (noiseEl) {
+        const sigma = document.getElementById('augNoise')?.checked
+            ? parseFloat(document.getElementById('noiseBox').value) || 0 : 0;
+        const contrast = sigma > 0 ? 1 + sigma / 50 : 1;
+        noiseEl.style.transform = '';
+        noiseEl.style.filter = `contrast(${contrast}) saturate(${1 + sigma / 100})`;
+        noiseEl.style.opacity = document.getElementById('augNoise')?.checked ? 1 : 0.4;
+    }
+}
+
+async function generateAug() {
+    document.getElementById('augStatus').textContent = 'Generating...';
+    const rot = document.getElementById('augRotate').checked;
+    const flipH = document.getElementById('augFlipH').checked;
+    const flipV = document.getElementById('augFlipV').checked;
+    const blur = document.getElementById('augBlur').checked;
+    const exp = document.getElementById('augExposure').checked;
+    const noise = document.getElementById('augNoise').checked;
+
+    if (!rot && !flipH && !flipV && !blur && !exp && !noise) {
+        document.getElementById('augStatus').textContent = '⚠️ Centang minimal 1 opsi augmentasi';
+        return;
+    }
+
+    const bar = document.getElementById('augBar');
+    const fill = document.getElementById('augFill');
+    bar.style.display = 'block';
+    fill.style.width = '0';
+    document.getElementById('genBtn').disabled = true;
+    try {
+        const res = await window.api.augmentDataset(projectName, modelName, {
+            rotate: rot,
+            rotateMax: rot ? parseFloat(document.getElementById('rotateBox').value) : 0,
+            flipH: flipH,
+            flipV: flipV,
+            blur: blur,
+            blurSigma: blur ? parseFloat(document.getElementById('blurBox').value) : 0,
+            exposure: exp,
+            exposureAlpha: exp ? parseFloat(document.getElementById('exposureBox').value) : 1.0,
+            noise: noise,
+            noiseSigma: noise ? parseFloat(document.getElementById('noiseBox').value) : 0,
+            multiplier: parseInt(document.getElementById('augMult').value) || 2,
+        });
+        fill.style.width = '100%';
+        document.getElementById('augStatus').textContent =
+            `✓ Generated ${res.generated} gambar + label (label ikut ditransform).`;
+        render();
+    } catch (e) {
+        document.getElementById('augStatus').textContent = 'Error: ' + e.message;
+    } finally {
+        document.getElementById('genBtn').disabled = false;
+        setTimeout(() => { bar.style.display = 'none'; }, 1500);
+    }
+}
+
+// Progress augmentasi realtime dari python (PROGRESS done/total)
+window.api.onAugmentProgress(data => {
+    if (data.project !== projectName || data.model !== modelName) return;
+    if (data.total) {
+        const pct = Math.round((data.done / data.total) * 100);
+        document.getElementById('augFill').style.width = pct + '%';
+        document.getElementById('augStatus').textContent = `Generating… ${data.done}/${data.total} (${pct}%)`;
+    }
+});
+
+// ---- Split slider (2 titik → 3 segmen: train | val | test) ----
+// thumbA = batas train|val, thumbB = batas val|test. A selalu <= B.
+function onSlide(which) {
+    let a = parseInt(document.getElementById('thumbA').value);
+    let b = parseInt(document.getElementById('thumbB').value);
+    if (which === 'A' && a > b) { b = a; document.getElementById('thumbB').value = b; }
+    if (which === 'B' && b < a) { a = b; document.getElementById('thumbA').value = a; }
+    updateTVT();
+}
+
+function updateTVT() {
+    const a = parseInt(document.getElementById('thumbA').value);
+    const b = parseInt(document.getElementById('thumbB').value);
+    document.getElementById('tvtBar').style.background =
+        `linear-gradient(to right, #22c55e 0 ${a}%, #f59e0b ${a}% ${b}%, #3b82f6 ${b}% 100%)`;
+    document.getElementById('lblTrain').textContent = a + '%';
+    document.getElementById('lblVal').textContent = (b - a) + '%';
+    document.getElementById('lblTest').textContent = (100 - b) + '%';
+}
+
+// ---- Split / Clean & Rebuild ----
+function readRatios() {
+    const a = parseInt(document.getElementById('thumbA').value);
+    const b = parseInt(document.getElementById('thumbB').value);
+    const train = a, val = b - a, test = 100 - b;
+    if (train <= 0) return null;   // train wajib > 0
+    return { train: train / 100, val: val / 100, test: test / 100 };
+}
+
+// ---- Gallery: preview gambar + kotak anotasi per grup (train/val/test) ----
+let currentGalSplit = 'train';
+const CLASS_COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'];
+
+async function loadGallery(split) {
+    currentGalSplit = split;
+    ['train', 'val', 'test'].forEach(s => {
+        const b = document.getElementById('gal' + s);
+        if (b) b.classList.toggle('primary', s === split);
+    });
+    const info = document.getElementById('galInfo');
+    const grid = document.getElementById('galleryGrid');
+    if (!info || !grid) return;
+    info.textContent = 'Memuat…';
+    grid.innerHTML = '';
+    let items = [];
+    try { items = await window.api.galleryData(projectName, modelName, split); }
+    catch (e) { info.textContent = 'Error: ' + e.message; return; }
+
+    const classes = (currentModel && currentModel.classes) || [];
+    const withBoxes = items.filter(i => i.boxes.length).length;
+    const augCount = items.filter(i => i.isAug).length;
+    const legend = classes.map((c, i) =>
+        `<span style="color:${CLASS_COLORS[i % 8]}">■</span> ${esc(c)}`).join('&nbsp;&nbsp;');
+    info.innerHTML = `Grup <strong>${esc(split)}</strong>: ${items.length} gambar ` +
+        `(${withBoxes} ber-anotasi, ${augCount} augmentasi).` + (legend ? ` Kelas: ${legend}` : '');
+
+    if (items.length === 0) {
+        grid.innerHTML = '<p class="muted">Belum ada gambar di grup ini. Split dulu.</p>';
+        return;
+    }
+    grid.innerHTML = items.slice(0, 300).map(it => {
+        const src = 'file://' + it.path.replace(/\\/g, '/');
+        const boxes = it.boxes.map(b => {
+            const color = CLASS_COLORS[(b.cls || 0) % 8];
+            const left = ((b.cx - b.w / 2) * 100).toFixed(2);
+            const top = ((b.cy - b.h / 2) * 100).toFixed(2);
+            const w = (b.w * 100).toFixed(2);
+            const h = (b.h * 100).toFixed(2);
+            const nm = (classes[b.cls] != null) ? esc(classes[b.cls]) : ('#' + b.cls);
+            return `<div class="gal-box" style="left:${left}%;top:${top}%;width:${w}%;height:${h}%;border-color:${color}">` +
+                   `<span style="background:${color}">${nm}</span></div>`;
+        }).join('');
+        const badge = it.isAug ? '<span class="gal-aug-badge">AUG</span>' : '';
+        return `<div class="gal-item"><div class="gal-wrap"><img loading="lazy" src="${src}">${boxes}</div>` +
+               `<div class="gal-cap">${esc(it.name)}${badge}</div></div>`;
+    }).join('');
+}
+
+async function doSplit() {
+    const ratios = readRatios();
+    if (!ratios) { document.getElementById('splitStatus').textContent = '⚠️ Total ratio tidak boleh 0'; return; }
+    await runSplitOp(() => window.api.splitDataset(projectName, modelName, ratios), false);
+}
+
+async function doCleanRebuild() {
+    if (!confirm('Clean & Rebuild akan MENGHAPUS semua gambar augmentasi (*.aug*) lalu split ulang. Gambar & label asli tetap aman. Lanjut?')) return;
+    const ratios = readRatios();
+    if (!ratios) { document.getElementById('splitStatus').textContent = '⚠️ Total ratio tidak boleh 0'; return; }
+    await runSplitOp(() => window.api.cleanRebuildDataset(projectName, modelName, ratios), true);
+}
+
+async function runSplitOp(fn, isRebuild) {
+    const bar = document.getElementById('splitBar');
+    const fill = document.getElementById('splitFill');
+    const status = document.getElementById('splitStatus');
+    document.getElementById('splitBtn').disabled = true;
+    document.getElementById('rebuildBtn').disabled = true;
+    bar.style.display = 'block';
+    fill.style.width = '35%';
+    status.textContent = isRebuild ? 'Membersihkan & split…' : 'Splitting…';
+    try {
+        const r = await fn();
+        fill.style.width = '100%';
+        let msg = `✓ Split selesai — train ${r.train}, val ${r.val}, test ${r.test} (dari ${r.originals} gambar asli ber-label).`;
+        if (isRebuild) msg = `✓ Rebuild selesai — ${r.removedAug} augmentasi lama dihapus, ${r.fixedNames} nama label diperbaiki. ` + msg;
+        if (r.leakRemoved) msg += ` ${r.leakRemoved} augmentasi dari gambar val/test dibuang (anti-leakage).`;
+        if (!r.hasVal) msg += ' ⚠️ Val kosong — tambah gambar/label dulu biar evaluasi jalan.';
+        status.innerHTML = msg;
+        render();
+    } catch (e) {
+        status.textContent = 'Error: ' + e.message;
+    } finally {
+        document.getElementById('splitBtn').disabled = false;
+        document.getElementById('rebuildBtn').disabled = false;
+        setTimeout(() => { bar.style.display = 'none'; }, 1500);
+    }
+}
+
+async function startTrain() {
+    await window.api.updateModel(projectName, modelName, {
+        training: {
+            ...currentModel.training,
+            epochs: parseInt(document.getElementById('epochs').value),
+            batch: parseInt(document.getElementById('batch').value),
+            imgsz: parseInt(document.getElementById('imgsz').value),
+            lr: parseFloat(document.getElementById('lr').value),
+        },
+    });
+    document.getElementById('trainStatus').textContent = 'Starting… (download base model + validasi dataset, bisa 1-2 menit di awal)';
+    document.getElementById('progress').style.width = '0';
+    const logEl = document.getElementById('trainLog');
+    logEl.textContent = '';
+    logEl.style.display = 'none';
+    document.getElementById('trainDash').style.display = 'block';
+    document.getElementById('resumeBtn').style.display = 'none';
+    _training = true;
+    resetDash();
+    try {
+        await window.api.startTraining(projectName, modelName, false);
+    } catch (e) { _training = false; document.getElementById('trainStatus').textContent = 'Error: ' + e.message; }
+}
+function cancelTrain() { window.api.cancelTraining(); }
+
+// Lanjutkan training dari checkpoint terakhir. Grafik dari epoch sebelumnya
+// (dibaca dari results.csv) di-tampilkan dulu, lalu training menyambung live.
+async function resumeTrain() {
+    const status = document.getElementById('trainStatus');
+    status.textContent = 'Resuming… memuat checkpoint & grafik terakhir';
+    document.getElementById('trainDash').style.display = 'block';
+    document.getElementById('resumeBtn').style.display = 'none';
+    _training = true;
+    try {
+        const hist = await window.api.loadTrainHistory(projectName, modelName);
+        if (hist && hist.rows && hist.rows.length) prefillDash(hist.rows);
+        await window.api.startTraining(projectName, modelName, true);
+    } catch (e) {
+        _training = false;
+        status.textContent = 'Error: ' + e.message;
+        checkResumeState();
+    }
+}
+
+// Isi grafik dari riwayat epoch (tanpa training) — dipakai saat resume & saat
+// membuka tab Training agar grafik terakhir langsung terlihat.
+function prefillDash(rows) {
+    resetDash();
+    rows.forEach(m => pushDash(m));
+}
+
+// Saat tab Training dibuka: tampilkan grafik terakhir, dan kalau ada run yang
+// terhenti di tengah (ada last.pt & epoch terakhir < target) munculkan tombol Resume.
+async function checkResumeState() {
+    if (_training) return;
+    const btn = document.getElementById('resumeBtn');
+    try {
+        const hist = await window.api.loadTrainHistory(projectName, modelName);
+        if (hist && hist.rows && hist.rows.length) {
+            prefillDash(hist.rows);
+            document.getElementById('trainDash').style.display = 'block';
+            // Gambar ulang setelah layout selesai supaya lebar canvas ke-baca benar.
+            requestAnimationFrame(() => { try { renderDash(); } catch (_) {} });
+            const interrupted = hist.hasCheckpoint && hist.totalEpochs && hist.lastEpoch < hist.totalEpochs;
+            if (interrupted) {
+                btn.style.display = '';
+                document.getElementById('trainStatus').textContent =
+                    `⏸ Training terhenti di epoch ${hist.lastEpoch}/${hist.totalEpochs}. Klik “Resume Training” untuk melanjutkan.`;
+            } else {
+                btn.style.display = 'none';
+            }
+        } else {
+            btn.style.display = 'none';
+        }
+    } catch (_) { if (btn) btn.style.display = 'none'; }
+}
+
+let _calibWired = false;
+async function runCalibrate() {
+    const el = document.getElementById('calibStatus');
+    el.style.display = 'block';
+    el.textContent = '🎯 Auto-Calibration mulai…';
+    if (!_calibWired) {
+        _calibWired = true;
+        window.api.onCalibrationProgress(p => {
+            if (p.total) el.textContent = `🎯 Kalibrasi ${p.done}/${p.total} (${p.image || ''})`;
+        });
+    }
+    try {
+        const res = await window.api.runCalibration(projectName, modelName);
+        el.innerHTML = `✓ Kalibrasi selesai — confidence terbaik <strong>${res.bestConf}</strong> ` +
+            `(F1=${res.bestF1.toFixed(3)}, ${res.evaluated} gambar val). Nilai sudah ditulis ke config.`;
+    } catch (e) {
+        el.textContent = '⚠️ ' + e.message;
+    }
+}
+
+async function importPt() {
+    document.getElementById('importStatus').textContent = 'Memilih file...';
+    try {
+        const res = await window.api.importPtModel(projectName, modelName);
+        if (res.canceled) {
+            document.getElementById('importStatus').textContent = '';
+            return;
+        }
+        const mb = (res.sizeBytes / 1024 / 1024).toFixed(1);
+        document.getElementById('importStatus').textContent = `✓ Import sukses (${mb} MB). Model sekarang siap dipakai di Workflow.`;
+        render();
+    } catch (e) {
+        document.getElementById('importStatus').textContent = 'Error: ' + e.message;
+    }
+}
+
+const trainLogEl = () => document.getElementById('trainLog');
+function appendTrainLog(text) {
+    const el = trainLogEl();
+    if (!text) return;
+    el.textContent = (el.textContent + text).slice(-6000);
+    el.scrollTop = el.scrollHeight;
+}
+
+// ==== Test / Evaluasi model (Test tab) ====
+let lastEval = null;
+function _pe(v) { return (v == null) ? '—' : (v * 100).toFixed(1) + '%'; }
+
+async function runEval() {
+    const split = document.getElementById('evalSplit').value;
+    const st = document.getElementById('evalStatus');
+    const btn = document.getElementById('evalBtn');
+    btn.disabled = true;
+    document.getElementById('evalDash').style.display = 'none';
+    st.textContent = '⏳ Menjalankan evaluasi… (load model + validasi + prediksi, bisa 1-2 menit)';
+    try {
+        const res = await window.api.evaluateModel(projectName, modelName, split);
+        lastEval = res;
+        renderEval(res);
+        st.textContent = `✓ Selesai (split: ${res.split}). Hasil tersimpan otomatis di folder model.`;
+        document.getElementById('evalOpenBtn').style.display = '';
+        document.getElementById('evalCsvBtn').style.display = '';
+    } catch (e) {
+        st.textContent = '❌ ' + e.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function renderEval(res) {
+    document.getElementById('evalDash').style.display = 'block';
+    const o = res.overall || {};
+    document.getElementById('evF1').textContent = _pe(o.f1);
+    document.getElementById('evMap').textContent = _pe(o.map50);
+    document.getElementById('evMap95').textContent = _pe(o.map5095);
+    document.getElementById('evP').textContent = _pe(o.precision);
+    document.getElementById('evR').textContent = _pe(o.recall);
+
+    const tb = document.querySelector('#evTable tbody');
+    tb.innerHTML = (res.perClass || []).map(c =>
+        `<tr><td>${esc(c.name)}</td><td>${_pe(c.precision)}</td><td>${_pe(c.recall)}</td><td>${_pe(c.map50)}</td><td>${_pe(c.map5095)}</td></tr>`
+    ).join('') || '<tr><td colspan="5" class="muted">Tidak ada data per-kelas</td></tr>';
+
+    const pl = res.plots || {};
+    const items = [
+        ['Confusion Matrix', pl.confusionMatrix],
+        ['Confusion Matrix (normalized)', pl.confusionMatrixNorm],
+        ['Precision-Recall Curve', pl.prCurve],
+        ['F1-Confidence Curve', pl.f1Curve],
+    ].filter(x => x[1]);
+    document.getElementById('evPlots').innerHTML = items.map(([t, p]) =>
+        `<figure><img src="file://${p.replace(/\\/g, '/')}"><figcaption>${esc(t)}</figcaption></figure>`
+    ).join('') || '<p class="muted">Grafik tidak tersedia.</p>';
+
+    const preds = res.predictions || [];
+    document.getElementById('evPredCount').textContent = preds.length;
+    document.getElementById('evPreds').innerHTML = preds.slice(0, 200).map(pr => {
+        const det = (pr.detections && pr.detections.length)
+            ? pr.detections.map(d => `${esc(d.name)} ${(d.conf * 100).toFixed(0)}%`).join(', ')
+            : '(tidak ada deteksi)';
+        return `<div class="gp"><img src="file://${pr.image.replace(/\\/g, '/')}"><div class="cap">${esc(pr.name)}<br>${det}</div></div>`;
+    }).join('') || '<p class="muted">Tidak ada gambar di split ini.</p>';
+}
+
+function openEvalDir() { if (lastEval && lastEval.savedDir) window.api.openEvalDir(lastEval.savedDir); }
+
+function exportEvalCsv() {
+    if (!lastEval) return;
+    const rows = [['type', 'name', 'precision', 'recall', 'map50', 'map5095', 'f1']];
+    const o = lastEval.overall || {};
+    rows.push(['overall', 'ALL', o.precision, o.recall, o.map50, o.map5095, o.f1]);
+    (lastEval.perClass || []).forEach(c => rows.push(['class', c.name, c.precision, c.recall, c.map50, c.map5095, '']));
+    rows.push([]);
+    rows.push(['prediction', 'image', 'detections']);
+    (lastEval.predictions || []).forEach(p =>
+        rows.push(['pred', p.name, (p.detections || []).map(d => `${d.name}:${(d.conf * 100).toFixed(0)}%`).join(' | ')]));
+    const csv = rows.map(r => r.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `eval_${modelName}_${lastEval.split}_${lastEval.generatedAt || ''}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// ==== Manajemen gambar dataset (context menu: Preview / Select / Delete) ====
+let currentImages = [];
+let selectedImgs = new Set();
+let ctxIdx = -1;
+
+(function injectImgCss() {
+    const st = document.createElement('style');
+    st.textContent = `
+        .thumb { position: relative; cursor: context-menu; }
+        .thumb.selected { outline: 3px solid #2563eb; outline-offset: -3px; }
+        .thumb.selected::after { content: '✓'; position: absolute; top: 3px; right: 3px; background: #2563eb; color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 12px; line-height: 18px; text-align: center; }
+        #imgCtxMenu { position: fixed; z-index: 3000; background: var(--panel, #fff); color: var(--text, inherit); border: 1px solid var(--border, #ccc); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.3); padding: 4px; min-width: 150px; display: none; }
+        #imgCtxMenu button { display: block; width: 100%; text-align: left; background: none; border: none; color: inherit; padding: 7px 12px; font-size: 13px; border-radius: 4px; cursor: pointer; }
+        #imgCtxMenu button:hover { background: var(--panel-alt, rgba(128,128,128,.15)); }
+        #imgCtxMenu button.danger { color: #ef4444; }
+        #imgPreview { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 3100; display: none; align-items: center; justify-content: center; flex-direction: column; }
+        #imgPreview img { max-width: 90%; max-height: 82%; box-shadow: 0 4px 30px rgba(0,0,0,.6); }
+        #imgPreview .cap { color: #fff; margin-top: 10px; font-size: 13px; }
+    `;
+    document.head.appendChild(st);
+})();
+
+function renderThumbs() {
+    const el = document.getElementById('thumbs');
+    if (!el) return;
+    if (!currentImages.length) {
+        el.innerHTML = '<div class="muted" style="padding:20px; text-align:center">Belum ada gambar</div>';
+        updateSelBar();
+        return;
+    }
+    el.innerHTML = currentImages.slice(0, 100).map((img, i) =>
+        `<div class="thumb${selectedImgs.has(img.name) ? ' selected' : ''}" data-idx="${i}">` +
+        `<img src="file://${img.path.replace(/\\/g, '/')}" alt="${esc(img.name)}"><span>${esc(img.name)}</span></div>`
+    ).join('');
+    updateSelBar();
+}
+
+function updateSelBar() {
+    const bar = document.getElementById('selBar');
+    const cnt = document.getElementById('selCount');
+    if (!bar) return;
+    if (selectedImgs.size > 0) { bar.style.display = 'flex'; if (cnt) cnt.textContent = selectedImgs.size + ' dipilih'; }
+    else bar.style.display = 'none';
+}
+
+function toggleSelect(idx) {
+    const img = currentImages[idx];
+    if (!img) return;
+    if (selectedImgs.has(img.name)) selectedImgs.delete(img.name);
+    else selectedImgs.add(img.name);
+    renderThumbs();
+}
+function clearSelection() { selectedImgs.clear(); renderThumbs(); }
+
+function openPreview(idx) {
+    const img = currentImages[idx];
+    if (!img) return;
+    let ov = document.getElementById('imgPreview');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'imgPreview';
+        ov.innerHTML = '<img><div class="cap"></div>';
+        ov.addEventListener('click', () => { ov.style.display = 'none'; });
+        document.body.appendChild(ov);
+    }
+    ov.querySelector('img').src = 'file://' + img.path.replace(/\\/g, '/');
+    ov.querySelector('.cap').textContent = img.name;
+    ov.style.display = 'flex';
+}
+
+async function deleteOne(idx) {
+    const img = currentImages[idx];
+    if (!img) return;
+    if (!confirm(`Hapus gambar "${img.name}" beserta anotasinya? Tidak bisa di-undo.`)) return;
+    await window.api.deleteImages(projectName, modelName, [img.name]);
+    render();
+}
+async function deleteSelected() {
+    if (!selectedImgs.size) return;
+    if (!confirm(`Hapus ${selectedImgs.size} gambar terpilih beserta anotasinya? Tidak bisa di-undo.`)) return;
+    await window.api.deleteImages(projectName, modelName, [...selectedImgs]);
+    selectedImgs.clear();
+    render();
+}
+
+function hideCtxMenu() { const m = document.getElementById('imgCtxMenu'); if (m) m.style.display = 'none'; }
+function showCtxMenu(x, y) {
+    let m = document.getElementById('imgCtxMenu');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'imgCtxMenu';
+        m.innerHTML =
+            '<button data-act="preview">🔍 Preview</button>' +
+            '<button data-act="select">☑️ Select</button>' +
+            '<button data-act="delete" class="danger">🗑 Delete</button>';
+        m.addEventListener('click', (e) => {
+            const b = e.target.closest('button'); if (!b) return;
+            const act = b.dataset.act; hideCtxMenu();
+            if (act === 'preview') openPreview(ctxIdx);
+            else if (act === 'select') toggleSelect(ctxIdx);
+            else if (act === 'delete') deleteOne(ctxIdx);
+        });
+        document.body.appendChild(m);
+    }
+    const selBtn = m.querySelector('[data-act="select"]');
+    const img = currentImages[ctxIdx];
+    if (selBtn) selBtn.textContent = (img && selectedImgs.has(img.name)) ? '☐ Deselect' : '☑️ Select';
+    m.style.display = 'block';
+    const mw = m.offsetWidth || 160, mh = m.offsetHeight || 110;
+    m.style.left = Math.min(x, window.innerWidth - mw - 6) + 'px';
+    m.style.top = Math.min(y, window.innerHeight - mh - 6) + 'px';
+}
+
+(function wireThumbCtx() {
+    const cont = document.getElementById('thumbs');
+    if (cont) {
+        cont.addEventListener('contextmenu', (e) => {
+            const t = e.target.closest('.thumb');
+            if (!t) return;
+            e.preventDefault();
+            ctxIdx = parseInt(t.dataset.idx);
+            showCtxMenu(e.clientX, e.clientY);
+        });
+        cont.addEventListener('dblclick', (e) => {
+            const t = e.target.closest('.thumb');
+            if (!t) return;
+            openPreview(parseInt(t.dataset.idx));
+        });
+    }
+    document.addEventListener('click', hideCtxMenu);
+    window.addEventListener('scroll', hideCtxMenu, true);
+})();
+
+// ==== Dashboard training (gaya Roboflow) ====
+let _training = false;   // true selama training/resume berjalan (cegah reset grafik)
+let dash = { ep: [], map: [], map95: [], p: [], r: [], f1: [], box: [], cls: [], dfl: [], vbox: [], vcls: [], vdfl: [] };
+function resetDash() {
+    dash = { ep: [], map: [], map95: [], p: [], r: [], f1: [], box: [], cls: [], dfl: [], vbox: [], vcls: [], vdfl: [] };
+    ['cardF1','cardMap','cardMap95','cardP','cardR'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = '—'; });
+    renderDash();
+}
+function _pct(v){ return (v == null) ? '—' : (v * 100).toFixed(1) + '%'; }
+function pushDash(m) {
+    dash.ep.push(m.epoch);
+    dash.map.push(m.mAP50 || 0); dash.map95.push(m.mAP5095 || 0);
+    dash.p.push(m.precision || 0); dash.r.push(m.recall || 0); dash.f1.push(m.f1 || 0);
+    dash.box.push(m.boxLoss || 0); dash.cls.push(m.clsLoss || 0); dash.dfl.push(m.dflLoss || 0);
+    dash.vbox.push(m.valBox || 0); dash.vcls.push(m.valCls || 0); dash.vdfl.push(m.valDfl || 0);
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = _pct(v); };
+    set('cardF1', m.f1); set('cardMap', m.mAP50); set('cardMap95', m.mAP5095);
+    set('cardP', m.precision); set('cardR', m.recall);
+    renderDash();
+}
+function renderDash() {
+    const lastEp = dash.ep[dash.ep.length - 1] || 0;
+    const cfgEp = (currentModel && currentModel.training) ? currentModel.training.epochs : 0;
+    const xMax = Math.max(cfgEp || 0, lastEp, 1);
+    const pts = arr => dash.ep.map((e, i) => ({ x: e, y: arr[i] }));
+    const sum3 = (a, b, c) => dash.ep.map((e, i) => ({ x: e, y: (a[i] || 0) + (b[i] || 0) + (c[i] || 0) }));
+    drawChart('chartMap', [
+        { color: '#7c3aed', name: 'mAP50', data: pts(dash.map) },
+        { color: '#c4b5fd', name: 'mAP50-95', data: pts(dash.map95) },
+    ], { yMin: 0, yMax: 1, xMax });
+    // Train vs Validation total loss (box+cls+dfl) → indikator overfitting
+    drawChart('chartTVLoss', [
+        { color: '#7c3aed', name: 'Train', data: sum3(dash.box, dash.cls, dash.dfl) },
+        { color: '#f59e0b', name: 'Val', data: sum3(dash.vbox, dash.vcls, dash.vdfl) },
+    ], { xMax });
+    drawChart('chartBox', [{ color: '#7c3aed', name: 'Box', data: pts(dash.box) }], { xMax });
+    drawChart('chartCls', [{ color: '#7c3aed', name: 'Class', data: pts(dash.cls) }], { xMax });
+    drawChart('chartDfl', [{ color: '#7c3aed', name: 'DFL', data: pts(dash.dfl) }], { xMax });
+    updateFitVerdict();
+}
+// Verdict overfitting / underfitting berdasarkan selisih & tren train vs val loss.
+function updateFitVerdict() {
+    const badge = document.getElementById('fitVerdict');
+    const detail = document.getElementById('fitDetail');
+    if (!badge) return;
+    const n = dash.ep.length;
+    const TL = dash.ep.map((e, i) => (dash.box[i] || 0) + (dash.cls[i] || 0) + (dash.dfl[i] || 0));
+    const VL = dash.ep.map((e, i) => (dash.vbox[i] || 0) + (dash.vcls[i] || 0) + (dash.vdfl[i] || 0));
+    const set = (txt, color, det) => {
+        badge.textContent = txt; badge.style.color = color; badge.style.borderColor = color;
+        if (detail) detail.textContent = det || '';
+    };
+    if (n < 5) { set('menilai…', 'var(--muted,#8a8f98)', 'Butuh beberapa epoch lagi untuk menilai overfitting/underfitting.'); return; }
+    const avgLast = arr => { const s = arr.slice(-Math.min(3, arr.length)); return s.reduce((a, b) => a + b, 0) / s.length; };
+    const tl = avgLast(TL), vl = avgLast(VL);
+    const minVL = Math.min(...VL);
+    const gapRatio = (vl - tl) / Math.max(tl, 1e-6);
+    const riseFromMin = (vl - minVL) / Math.max(minVL, 1e-6);
+    const lastMap = dash.map[dash.map.length - 1] || 0;
+    // val loss ≈ train loss di semua epoch → kemungkinan tidak ada set validasi terpisah
+    const noSepVal = dash.ep.every((e, i) => Math.abs(VL[i] - TL[i]) / Math.max(TL[i], 1e-6) < 0.02);
+    if (noSepVal) {
+        set('⚠ Val = Train', '#f59e0b',
+            'Validation loss identik dengan training loss — sepertinya belum ada set validasi terpisah (val memakai data train). Tambah gambar ke split Val agar overfitting bisa dinilai akurat.');
+        return;
+    }
+    if (gapRatio > 0.30 || riseFromMin > 0.15) {
+        set('⚠ Overfitting', '#f59e0b',
+            `Val loss (${vl.toFixed(3)}) lebih tinggi dari train loss (${tl.toFixed(3)}, selisih ${(gapRatio * 100).toFixed(0)}%)` +
+            (riseFromMin > 0.15 ? ' dan cenderung naik dari titik terbaiknya' : '') +
+            '. Coba tambah data/augmentasi, kurangi epoch, atau pakai early stopping.');
+        return;
+    }
+    if (lastMap < 0.5) {
+        set('⚠ Underfitting', '#f59e0b',
+            `Performa validasi masih rendah (mAP50 ${(lastMap * 100).toFixed(1)}%) dengan loss tinggi. Tambah epoch, perbanyak/berkualitaskan data & label, atau naikkan kapasitas model.`);
+        return;
+    }
+    set('✓ Fit seimbang', '#22c55e',
+        `Train & val loss berdekatan (selisih ${(gapRatio * 100).toFixed(0)}%) dan stabil — indikasi model general dengan baik.`);
+}
+function drawChart(canvasId, series, opts) {
+    opts = opts || {};
+    const cv = document.getElementById(canvasId);
+    if (!cv) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = cv.clientWidth || (cv.parentElement ? cv.parentElement.clientWidth : 600) || 600;
+    const cssH = parseInt(cv.getAttribute('height')) || 200;
+    // Kunci tinggi tampilan canvas ke nilai atribut (px). Tanpa ini, CSS width:100%
+    // memakai aspect-ratio dari buffer; kalau lebar ke-baca salah (mis. tab baru
+    // dibuka, layout belum jadi), tingginya bisa membengkak.
+    cv.style.height = cssH + 'px';
+    cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+    const padL = 46, padR = 14, padT = 10, padB = 24;
+    const w = cssW - padL - padR, h = cssH - padT - padB;
+    let ys = [], maxX = 0;
+    series.forEach(s => s.data.forEach(pt => { ys.push(pt.y); if (pt.x > maxX) maxX = pt.x; }));
+    let minY = (opts.yMin != null) ? opts.yMin : (ys.length ? Math.min(...ys) : 0);
+    let maxY = (opts.yMax != null) ? opts.yMax : (ys.length ? Math.max(...ys) : 1);
+    if (minY === maxY) maxY = minY + 1;
+    const xMax = Math.max(opts.xMax || maxX, 1);
+    const X = x => padL + (x / xMax) * w;
+    const Y = y => padT + h - ((y - minY) / (maxY - minY)) * h;
+    ctx.font = '10px sans-serif'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(140,143,152,.20)'; ctx.fillStyle = '#8a8f98';
+    const ty = 5;
+    for (let i = 0; i <= ty; i++) {
+        const val = minY + (maxY - minY) * i / ty, py = Y(val);
+        ctx.beginPath(); ctx.moveTo(padL, py); ctx.lineTo(padL + w, py); ctx.stroke();
+        ctx.textAlign = 'right'; ctx.fillText(val.toFixed(2), padL - 6, py + 3);
+    }
+    ctx.textAlign = 'center';
+    const tx = Math.min(6, xMax);
+    for (let i = 0; i <= tx; i++) { const xv = Math.round(xMax * i / tx); ctx.fillText(xv, X(xv), padT + h + 15); }
+    series.forEach(s => {
+        if (!s.data.length) return;
+        ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.beginPath();
+        s.data.forEach((pt, i) => { const px = X(pt.x), py = Y(pt.y); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+        ctx.stroke();
+    });
+    // Simpan skala untuk tooltip hover, dan pasang listener sekali saja.
+    cv._chart = { series, opts, X, Y, padT, h, cssW, cssH };
+    if (!cv._hoverWired) {
+        cv._hoverWired = true;
+        cv.style.cursor = 'crosshair';
+        cv.addEventListener('mousemove', onChartMove);
+        cv.addEventListener('mouseleave', onChartLeave);
+    }
+}
+function _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+function onChartLeave(e) {
+    const cv = e.currentTarget; const st = cv._chart; if (!st) return;
+    drawChart(cv.id, st.series, st.opts);   // gambar ulang bersih tanpa overlay
+}
+function onChartMove(e) {
+    const cv = e.currentTarget; const st = cv._chart; if (!st) return;
+    const base = (st.series.find(s => s.data && s.data.length) || {}).data || [];
+    if (!base.length) return;
+    const mx = e.clientX - cv.getBoundingClientRect().left;
+    let bi = 0, bd = Infinity;
+    base.forEach((pt, i) => { const d = Math.abs(st.X(pt.x) - mx); if (d < bd) { bd = d; bi = i; } });
+    drawChart(cv.id, st.series, st.opts);    // redraw base
+    const s2 = cv._chart;                    // skala terbaru
+    const ctx = cv.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const epoch = base[bi].x;
+    const px = s2.X(epoch);
+    ctx.save();
+    // garis bantu vertikal
+    ctx.strokeStyle = 'rgba(140,143,152,.55)'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(px, s2.padT); ctx.lineTo(px, s2.padT + s2.h); ctx.stroke();
+    ctx.setLineDash([]);
+    // titik pada tiap garis + kumpulkan nilai
+    const items = [];
+    st.series.forEach(s => {
+        const pt = s.data[bi]; if (!pt) return;
+        const py = s2.Y(pt.y);
+        ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+        items.push({ color: s.color, name: s.name || '', y: pt.y });
+    });
+    // kotak tooltip
+    const fmt = v => (Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(2));
+    const header = `Epoch ${epoch}`;
+    ctx.font = '11px sans-serif';
+    let tw = ctx.measureText(header).width;
+    items.forEach(it => { tw = Math.max(tw, ctx.measureText(`${it.name ? it.name + ': ' : ''}${fmt(it.y)}`).width + 14); });
+    const padX = 8, lh = 15;
+    const boxW = tw + padX * 2, boxH = (items.length + 1) * lh + 6;
+    let bx = px + 12; if (bx + boxW > s2.cssW - 4) bx = px - boxW - 12; if (bx < 4) bx = 4;
+    const by = s2.padT + 6;
+    ctx.fillStyle = 'rgba(20,22,28,.92)'; ctx.strokeStyle = 'rgba(140,143,152,.4)'; ctx.lineWidth = 1;
+    _roundRect(ctx, bx, by, boxW, boxH, 5); ctx.fill(); ctx.stroke();
+    ctx.textAlign = 'left'; ctx.fillStyle = '#e6e7ea';
+    let ty = by + 14;
+    ctx.fillText(header, bx + padX, ty); ty += lh;
+    items.forEach(it => {
+        ctx.fillStyle = it.color; ctx.beginPath(); ctx.arc(bx + padX + 4, ty - 4, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e6e7ea';
+        ctx.fillText(`${it.name ? it.name + ': ' : ''}${fmt(it.y)}`, bx + padX + 14, ty); ty += lh;
+    });
+    ctx.restore();
+}
+function toggleLog() {
+    const el = document.getElementById('trainLog'); const b = document.getElementById('logToggle');
+    const show = el.style.display === 'none';
+    el.style.display = show ? 'block' : 'none';
+    if (b) b.textContent = show ? '📄 Sembunyikan log' : '📄 Lihat log detail';
+}
+window.addEventListener('resize', () => { try { renderDash(); } catch (_) {} });
+
+let _lastMetrics = { map: 0, p: 0, r: 0, f1: 0 };
+
+window.api.onTrainingProgress(data => {
+    if (data.project !== projectName || data.model !== modelName) return;
+    const p = data.progress || {};
+    if (p.log) appendTrainLog(p.log);
+    if (p.epochMetrics) { document.getElementById('trainDash').style.display = 'block'; pushDash(p.epochMetrics); }
+
+    // Progress bar berbasis epoch (dengan sub-progress batch bila tersedia)
+    if (p.total) {
+        let base = p.epoch ? p.epoch - 1 : 0;
+        if (p.nb && p.batch) base += p.batch / p.nb;
+        else if (p.epoch) base = p.epoch;
+        const pct = Math.max(0, Math.min(100, (base / p.total) * 100));
+        document.getElementById('progress').style.width = pct.toFixed(1) + '%';
+        if (!p.done) {
+            document.getElementById('trainStatus').textContent =
+                `Training… epoch ${p.epoch || 0}/${p.total}` +
+                (p.nb ? ` · batch ${p.batch || 0}/${p.nb}` : '');
+        }
+    }
+
+    // Metrik final saat muncul dari train.py
+    if (p.finalMAP != null || p.finalP != null || p.finalR != null) {
+        _lastMetrics.map = p.finalMAP || 0;
+        _lastMetrics.p = p.finalP || 0;
+        _lastMetrics.r = p.finalR || 0;
+        _lastMetrics.f1 = (_lastMetrics.p + _lastMetrics.r)
+            ? (2 * _lastMetrics.p * _lastMetrics.r) / (_lastMetrics.p + _lastMetrics.r) : 0;
+        const mm = document.getElementById('trainMetrics');
+        mm.style.display = 'flex';
+        mm.innerHTML = `
+            <span>mAP: <strong>${_lastMetrics.map.toFixed(3)}</strong></span>
+            <span>P: <strong>${_lastMetrics.p.toFixed(3)}</strong></span>
+            <span>R: <strong>${_lastMetrics.r.toFixed(3)}</strong></span>
+            <span>F1: <strong>${_lastMetrics.f1.toFixed(3)}</strong></span>`;
+    }
+
+    if (p.done) {
+        _training = false;
+        if (p.exitCode === 0) {
+            document.getElementById('progress').style.width = '100%';
+            document.getElementById('trainStatus').textContent = '✓ Selesai';
+            document.getElementById('resumeBtn').style.display = 'none';
+            // Persist status trained + metrik supaya tetap muncul saat halaman dibuka ulang
+            window.api.updateModel(projectName, modelName, {
+                trained: true,
+                lastMAP: _lastMetrics.map,
+                lastPrecision: _lastMetrics.p,
+                lastRecall: _lastMetrics.r,
+                lastF1: _lastMetrics.f1,
+            }).then(() => render());
+        } else {
+            document.getElementById('trainStatus').textContent =
+                `❌ Training gagal (exit ${p.exitCode}). Lihat log di bawah.`;
+            if (p.errorLog) appendTrainLog('\n' + p.errorLog);
+            // Kalau masih ada checkpoint yang bisa dilanjut, munculkan lagi tombol Resume.
+            const rb = document.getElementById('resumeBtn');
+            window.api.loadTrainHistory(projectName, modelName).then(h => {
+                if (h && h.hasCheckpoint && h.totalEpochs && h.lastEpoch < h.totalEpochs) rb.style.display = '';
+            }).catch(() => {});
+        }
+    }
+});
+
+// ---- Init halaman ----
+updateTVT();
+render();
+</script>
+</body>
+</html>
