@@ -1186,10 +1186,12 @@ function drawChart(canvasId, series, opts) {
     if (!cv) return;
     const dpr = window.devicePixelRatio || 1;
     const cssW = cv.clientWidth || (cv.parentElement ? cv.parentElement.clientWidth : 600) || 600;
-    const cssH = parseInt(cv.getAttribute('height')) || 200;
-    // Kunci tinggi tampilan canvas ke nilai atribut (px). Tanpa ini, CSS width:100%
-    // memakai aspect-ratio dari buffer; kalau lebar ke-baca salah (mis. tab baru
-    // dibuka, layout belum jadi), tingginya bisa membengkak.
+    // Tinggi logis (CSS px) DIKUNCI sekali di dataset. Jangan baca ulang dari
+    // getAttribute('height'), karena baris `cv.height = cssH*dpr` di bawah menimpa
+    // atribut itu dengan nilai ter-skala dpr → tiap redraw (mis. saat hover)
+    // tingginya berlipat terus sampai melebihi batas canvas & grafik jadi rusak.
+    if (!cv.dataset.h) cv.dataset.h = parseInt(cv.getAttribute('height')) || 200;
+    const cssH = parseInt(cv.dataset.h) || 200;
     cv.style.height = cssH + 'px';
     cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
     const ctx = cv.getContext('2d');
