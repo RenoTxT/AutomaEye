@@ -1,0 +1,28 @@
+# Normalisasi line-ending biar konsisten antar device (Windows/Mac/Linux).
+# Tanpa ini, semua file bisa kelihatan "modified" setelah clone/pull di Windows.
+
+# Default: biarkan git yang urus (LF di repo, CRLF/LF lokal sesuai OS)
+* text=auto
+
+# File script/teks → paksa LF di repo
+*.js   text eol=lf
+*.py   text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+
+# File batch Windows → wajib CRLF
+*.bat  text eol=crlf
+
+# File biner → jangan diutak-atik git (mencegah korup & diff palsu)
+*.pt    binary
+*.pth   binary
+*.onnx  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.cache binary
