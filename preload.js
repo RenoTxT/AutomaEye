@@ -53,6 +53,13 @@ contextBridge.exposeInMainWorld('api', {
     loadTrainHistory: (project, model) => ipcRenderer.invoke('training:loadHistory', { project, model }),
     onTrainingProgress: (cb) => ipcRenderer.on('training:progress', (_, data) => cb(data)),
 
+    // Sinkronisasi GitHub (Save/Load)
+    gitStatus: () => ipcRenderer.invoke('git:status'),
+    gitPush: (message) => ipcRenderer.invoke('git:push', { message }),
+    gitPull: () => ipcRenderer.invoke('git:pull'),
+    gitAutoPullOnce: () => ipcRenderer.invoke('git:autoPullOnce'),
+    quitApp: () => ipcRenderer.invoke('app:quit'),
+
     // Workflow
     saveWorkflow: (project, steps, onFirstNG) => ipcRenderer.invoke('workflow:save', { project, steps, onFirstNG }),
 

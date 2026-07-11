@@ -21,6 +21,11 @@ const output = require('./lib/output');
 const labelstudio = require('./lib/labelstudio');
 const calibration = require('./lib/calibration');
 const selflearning = require('./lib/selflearning');
+const gitsync = require('./lib/gitsync');
+
+// Root repo untuk sinkronisasi = folder app (tempat main.js & .git berada)
+const APP_ROOT = __dirname;
+let _autoPullDone = false, _autoPullResult = null;
 
 let mainWindow;
 let cfg;
@@ -373,6 +378,23 @@ ipcMain.handle('training:start', async (event, { project, model, resume }) => {
 ipcMain.handle('training:cancel', () => inference.cancelTraining());
 ipcMain.handle('training:loadHistory', (_e, { project, model }) =>
     inference.loadTrainHistory(projectsRoot, project, model));
+
+// ---- Sinkronisasi GitHub (Save/Load) ----
+ipcMain.handle('git:status', () => gitsync.status(APP_ROOT));
+ipcMain.handle('git:push', (_e, { message } = {}) => gitsync.push(APP_ROOT, message));
+ipcMain.handle('git:pull', () => gitsync.pull(APP_ROOT));
+ipcMain.handle('app:quit', () => { app.quit(); });
+// Auto-load versi terbaru sekali saja saat app pertama dibuka.
+ipcMain.handle('git:autoPullOnce', async () => {
+    if (_autoPullDone) return { skipped: true, result: _autoPullResult };
+    _autoPullDone = true;
+    try {
+        _autoPullResult = await gitsync.pull(APP_ROOT);
+    } catch (e) {
+        _autoPullResult = { ok: false, log: String(e && e.message || e) };
+    }
+    return { skipped: false, result: _autoPullResult };
+});
 
 // ---- Evaluasi / Test model ----
 ipcMain.handle('eval:run', async (event, { project, model, split }) =>
