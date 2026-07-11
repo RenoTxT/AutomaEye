@@ -1,25 +1,19 @@
 # ===== AutomaEyes — .gitignore =====
+# Hanya kecualikan yang bisa di-install / dihasilkan ulang di tiap device.
+# Model (.pt), dataset, label, dan folder projects/ SENGAJA diikutkan
+# supaya beda user/device bisa langsung lanjut tanpa training & upload ulang.
 
-# Node.js dependencies (regenerate: npm install)
+# Dependensi Node — regenerate: npm install
 node_modules/
 
-# Python virtual-env & cache (dibuat ulang oleh setup.bat)
+# Virtual-env Label Studio — regenerate: setup.bat  (besar, ~700 MB)
 python/ls-venv/
+
+# Cache Python
 **/__pycache__/
 *.pyc
 
-# Model weights — besar, GitHub tolak file >100 MB
-*.pt
-
-# Output training & dataset per-model (besar, bisa dihasilkan ulang)
-projects/*/models/*/runs/
-projects/*/models/*/weights/
-projects/*/models/*/dataset/images/
-projects/*/models/*/dataset/labels/
-projects/*/outputs/
-
-# Log & temporary
+# Log & sampah OS
 *.log
-_ls_install.log
 Thumbs.db
 .DS_Store
