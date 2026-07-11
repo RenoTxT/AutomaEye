@@ -52,6 +52,10 @@ def main():
     except ImportError as e:
         print(json.dumps({"error": f"deps missing: {e}. Run: pip install ultralytics pillow"}))
         sys.exit(1)
+    try:
+        import cv2  # untuk pengukuran GD&T dari kontur mask (segmentation)
+    except Exception:
+        cv2 = None
 
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     arr = np.array(img)
@@ -67,24 +71,54 @@ def main():
     )
     infer_ms = (time.time() - t0) * 1000
 
+    def measure_from_contour(contour):
+        """Ukuran (piksel) dari kontur mask segmentation — untuk GD&T presisi.
+        diameterPx = diameter lingkaran min-enclosing; width/height = sisi min-area rect."""
+        if cv2 is None or contour is None or len(contour) < 3:
+            return None
+        try:
+            cnt = np.array(contour, dtype=np.float32).reshape(-1, 1, 2)
+            (_, _), radius = cv2.minEnclosingCircle(cnt)
+            (_, _), (w, h), _ = cv2.minAreaRect(cnt)
+            return {
+                "diameterPx": float(radius * 2.0),
+                "widthPx": float(min(w, h)),
+                "heightPx": float(max(w, h)),
+                "areaPx": float(cv2.contourArea(cnt)),
+            }
+        except Exception:
+            return None
+
     detections = []
     min_conf = 1.0
     verdict = "OK"
     for r in results:
         if r.boxes is None:
             continue
-        for box in r.boxes:
+        # Kontur mask (kalau model segmentation) — selaras urutannya dengan boxes.
+        masks_xy = None
+        if getattr(r, "masks", None) is not None:
+            try:
+                masks_xy = r.masks.xy
+            except Exception:
+                masks_xy = None
+        for j, box in enumerate(r.boxes):
             cls_id = int(box.cls[0])
             conf = float(box.conf[0])
             xyxy = box.xyxy[0].tolist()
             cls_name = classes[cls_id] if cls_id < len(classes) else str(cls_id)
-            detections.append({
+            det = {
                 "x1": xyxy[0], "y1": xyxy[1],
                 "x2": xyxy[2], "y2": xyxy[3],
                 "confidence": conf,
                 "class_id": cls_id,
                 "class_name": cls_name,
-            })
+            }
+            if masks_xy is not None and j < len(masks_xy):
+                meas = measure_from_contour(masks_xy[j])
+                if meas:
+                    det["measure"] = meas
+            detections.append(det)
             if cls_name != "OK":
                 verdict = "NG"
                 if conf < min_conf:

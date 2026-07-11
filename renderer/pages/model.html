@@ -15,6 +15,11 @@
     </div>
     <div class="meta-row" id="meta"></div>
 
+    <div class="card" id="addonRulesCard" style="display:none">
+        <div class="section-title">Aturan Inspeksi (Add-ons)</div>
+        <div style="padding:12px" id="addonRulesBody"></div>
+    </div>
+
     <div class="tabs">
         <div class="tab-headers">
             <button class="active" onclick="showTab(this,'dataset')">📁 Dataset</button>
@@ -407,6 +412,8 @@ async function render() {
     const splitInfo = document.getElementById('splitCounts');
     if (splitInfo) splitInfo.innerHTML =
         `Sekarang: <strong>${stats.train}</strong> train · <strong>${stats.val || 0}</strong> val · <strong>${stats.test || 0}</strong> test`;
+
+    renderAddonRules();
 
     document.getElementById('epochs').value = currentModel.training.epochs;
     document.getElementById('batch').value = currentModel.training.batch;
@@ -1180,6 +1187,224 @@ function updateFitVerdict() {
     set('✓ Fit seimbang', '#22c55e',
         `Train & val loss berdekatan (selisih ${(gapRatio * 100).toFixed(0)}%) dan stabil — indikasi model general dengan baik.`);
 }
+// ==== Aturan Inspeksi (Add-ons) ====
+// Hanya menampilkan add-on yang DIPILIH saat model dibuat (currentModel.addons).
+// Presence Check tanpa parameter; Count & GD&T punya parameter untuk diatur.
+function renderAddonRules() {
+    const card = document.getElementById('addonRulesCard');
+    const body = document.getElementById('addonRulesBody');
+    if (!card || !body || !currentModel) return;
+    const addons = currentModel.addons || [];
+    if (!addons.length) { card.style.display = 'none'; return; }
+    card.style.display = '';
+    const cfg = currentModel.addonConfig || {};
+    const exp = Number.isFinite(cfg.countExpected) ? cfg.countExpected : 1;
+    const g = cfg.gdt || {};
+    const gm = g.measure || 'diameter';
+
+    const blocks = [];
+    if (addons.includes('Presence Check')) {
+        blocks.push(`<p style="margin:6px 0"><strong>Presence Check</strong> — OK jika minimal 1 objek terdeteksi (cek part ada/hilang). <span class="muted">Tidak ada parameter.</span></p>`);
+    }
+    if (addons.includes('Count')) {
+        blocks.push(`<p style="margin:10px 0 2px"><strong>Count</strong> — OK jika jumlah objek tepat sama dengan target.</p>
+            <label style="display:block;margin:0 0 4px">Target jumlah
+                <input type="number" id="ruleCountExpected" min="0" value="${exp}" style="width:110px"></label>`);
+    }
+    if (addons.includes('GD&T Measurement')) {
+        const pc = g.perClass || {};
+        const legacy = { measure: g.measure, nominalMM: g.nominalMM, toleranceMM: g.toleranceMM };
+        const classRows = (currentModel.classes || []).map((cls, i) => {
+            const s = pc[cls] || legacy || {};
+            const sm = s.measure || 'diameter';
+            return `<div style="margin:4px 0;padding:6px 8px;background:var(--panel-alt);border-radius:4px">
+                <strong>${esc(cls)}</strong>
+                <label style="margin-left:6px">Ukur
+                    <select id="gdtMeasure_${i}" style="width:110px">
+                        <option value="diameter" ${sm === 'diameter' ? 'selected' : ''}>Diameter</option>
+                        <option value="width" ${sm === 'width' ? 'selected' : ''}>Lebar</option>
+                        <option value="height" ${sm === 'height' ? 'selected' : ''}>Tinggi</option>
+                    </select></label>
+                <label>Nominal(mm) <input type="number" id="gdtNominal_${i}" step="0.01" value="${s.nominalMM != null ? s.nominalMM : ''}" style="width:90px"></label>
+                <label>Tol±(mm) <input type="number" id="gdtTol_${i}" step="0.01" value="${s.toleranceMM != null ? s.toleranceMM : 0.1}" style="width:80px"></label>
+            </div>`;
+        }).join('');
+        blocks.push(`<p style="margin:10px 0 2px"><strong>GD&amp;T Measurement</strong> — ukur dimensi <strong>per kelas</strong>.</p>
+            <div style="margin:0 0 8px 4px;border-left:2px solid var(--border);padding-left:12px">
+                <p class="muted" style="font-size:11px;margin:2px 0 6px">Kalibrasi mm/piksel (berlaku semua kelas). Termudah pakai kamera + grid.</p>
+                <button class="btn small" type="button" onclick="openGdtCalib()" style="margin-bottom:8px">📷 Kalibrasi via Kamera (grid ruler)</button><br>
+                <label>Ref. asli (mm) <input type="number" id="gdtRefMM" step="0.01" style="width:90px" placeholder="mis. 25"></label>
+                <label>= piksel <input type="number" id="gdtRefPx" step="1" style="width:90px" placeholder="mis. 480"></label>
+                <button class="btn small" type="button" onclick="calcMmPerPx()">Hitung mm/piksel</button>
+                <div style="margin:6px 0"><label>mm / piksel <input type="number" id="gdtMmPerPx" step="0.0001" value="${g.mmPerPixel != null ? g.mmPerPixel : ''}" style="width:120px"></label></div>
+                <p class="muted" style="font-size:11px;margin:8px 0 2px">Spesifikasi ukur per kelas (kosongkan nominal = kelas itu tidak diukur):</p>
+                ${classRows || '<p class="muted" style="font-size:11px">Model belum punya kelas.</p>'}
+            </div>`);
+    }
+
+    const other = addons.filter(a => !['Presence Check', 'Count', 'GD&T Measurement'].includes(a));
+    if (other.length) blocks.push(`<p class="muted" style="font-size:12px">${esc(other.join(', '))} — belum aktif (placeholder).</p>`);
+
+    const configurable = addons.includes('Count') || addons.includes('GD&T Measurement');
+    body.innerHTML = `
+        <p class="muted" style="font-size:12px;margin:0 0 8px">Add-on aktif untuk model ini (dipilih saat model dibuat):</p>
+        ${blocks.join('')}
+        ${configurable ? `<button class="btn small" onclick="saveAddonRules()">💾 Simpan Aturan</button>
+        <span id="ruleSaveStatus" class="muted" style="margin-left:8px;font-size:12px"></span>` : ''}
+        <p class="muted" style="font-size:11px;margin-top:8px">Add-on hanya berpengaruh saat inspeksi di halaman Run, dan model harus jadi step di Workflow.</p>
+    `;
+}
+
+// Kalibrasi: mm/piksel = ukuran asli (mm) ÷ ukuran di gambar (piksel).
+function calcMmPerPx() {
+    const mm = parseFloat(document.getElementById('gdtRefMM').value);
+    const px = parseFloat(document.getElementById('gdtRefPx').value);
+    if (!mm || !px) { alert('Isi ref. mm dan piksel dulu.'); return; }
+    document.getElementById('gdtMmPerPx').value = (mm / px).toFixed(5);
+}
+
+// ==== Kalibrasi via Kamera: live view + grid ruler piksel + ukur tarik-garis ====
+let _calib = null;
+function openGdtCalib() {
+    closeGdtCalib();
+    const overlay = document.createElement('div');
+    overlay.id = 'gdtCalibOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:4000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px';
+    overlay.innerHTML = `
+        <div style="color:#fff;font-size:13px;max-width:720px;text-align:center">
+            Letakkan benda yang ukuran aslinya kamu tahu. <strong>Tarik garis</strong> di gambar sepanjang sisi benda,
+            isi panjang aslinya (mm), lalu klik <em>Pakai</em>. Grid = penggaris piksel.
+        </div>
+        <canvas id="calibCanvas" width="640" height="480" style="background:#000;max-width:95vw;max-height:60vh;cursor:crosshair;border:1px solid #444"></canvas>
+        <div style="color:#fff;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;font-size:13px">
+            <label style="color:#fff">Skala grid (px/kotak)
+                <input type="number" id="calibGrid" min="10" value="50" style="width:80px"></label>
+            <span>Terukur: <strong id="calibPx">—</strong> px</span>
+            <label style="color:#fff">Panjang asli (mm)
+                <input type="number" id="calibMM" step="0.01" style="width:90px" placeholder="mis. 25"></label>
+            <span>→ <strong id="calibMmpp">—</strong> mm/px</span>
+            <button class="btn small" type="button" id="calibApply">✓ Pakai nilai ini</button>
+            <button class="btn small" type="button" id="calibClose">Tutup</button>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const canvas = document.getElementById('calibCanvas');
+    const ctx = canvas.getContext('2d');
+    const video = document.createElement('video');
+    video.autoplay = true; video.muted = true; video.playsInline = true;
+
+    _calib = { overlay, canvas, video, stream: null, raf: 0, p0: null, p1: null, dragging: false, pxLen: 0 };
+
+    navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } })
+        .then(stream => {
+            _calib.stream = stream; video.srcObject = stream;
+            video.onloadedmetadata = () => { video.play(); loopCalib(); };
+        })
+        .catch(e => { alert('Tidak bisa akses kamera: ' + e.message); closeGdtCalib(); });
+
+    // Interaksi ukur (koordinat display → dipetakan ke piksel INTRINSIK video).
+    const toDisp = ev => {
+        const r = canvas.getBoundingClientRect();
+        return { x: (ev.clientX - r.left) * (canvas.width / r.width), y: (ev.clientY - r.top) * (canvas.height / r.height) };
+    };
+    canvas.addEventListener('mousedown', ev => { _calib.p0 = toDisp(ev); _calib.p1 = null; _calib.dragging = true; });
+    canvas.addEventListener('mousemove', ev => { if (_calib.dragging) _calib.p1 = toDisp(ev); });
+    canvas.addEventListener('mouseup', ev => { _calib.p1 = toDisp(ev); _calib.dragging = false; });
+
+    document.getElementById('calibClose').onclick = closeGdtCalib;
+    document.getElementById('calibApply').onclick = () => {
+        const mm = parseFloat(document.getElementById('calibMM').value);
+        if (!mm || !_calib.pxLen) { alert('Tarik garis di benda & isi panjang asli (mm) dulu.'); return; }
+        const mmpp = mm / _calib.pxLen;
+        document.getElementById('gdtMmPerPx').value = mmpp.toFixed(5);
+        document.getElementById('gdtRefMM').value = mm;
+        document.getElementById('gdtRefPx').value = Math.round(_calib.pxLen);
+        closeGdtCalib();
+    };
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeGdtCalib(); });
+}
+
+function loopCalib() {
+    if (!_calib) return;
+    const { canvas, video, ctx } = _calib;
+    const c = canvas.getContext('2d');
+    // Samakan buffer canvas dengan resolusi intrinsik video (biar px = px asli capture).
+    if (video.videoWidth && canvas.width !== video.videoWidth) {
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    }
+    c.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Grid + label piksel.
+    const gsEl = document.getElementById('calibGrid');
+    const gs = Math.max(10, parseInt(gsEl && gsEl.value, 10) || 50);
+    c.strokeStyle = 'rgba(0,255,120,.35)'; c.fillStyle = 'rgba(0,255,120,.9)';
+    c.lineWidth = 1; c.font = '11px monospace';
+    for (let x = 0; x <= canvas.width; x += gs) {
+        c.beginPath(); c.moveTo(x, 0); c.lineTo(x, canvas.height); c.stroke();
+        if (x % (gs * 2) === 0) c.fillText(x, x + 2, 12);
+    }
+    for (let y = 0; y <= canvas.height; y += gs) {
+        c.beginPath(); c.moveTo(0, y); c.lineTo(canvas.width, y); c.stroke();
+        if (y % (gs * 2) === 0) c.fillText(y, 2, y + 12);
+    }
+
+    // Garis ukur.
+    if (_calib.p0 && _calib.p1) {
+        c.strokeStyle = '#ff3b3b'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(_calib.p0.x, _calib.p0.y); c.lineTo(_calib.p1.x, _calib.p1.y); c.stroke();
+        c.fillStyle = '#ff3b3b';
+        [_calib.p0, _calib.p1].forEach(p => { c.beginPath(); c.arc(p.x, p.y, 4, 0, 7); c.fill(); });
+        const len = Math.hypot(_calib.p1.x - _calib.p0.x, _calib.p1.y - _calib.p0.y);
+        _calib.pxLen = len;
+        const pxEl = document.getElementById('calibPx'); if (pxEl) pxEl.textContent = Math.round(len);
+        const mm = parseFloat(document.getElementById('calibMM').value);
+        const mmppEl = document.getElementById('calibMmpp');
+        if (mmppEl) mmppEl.textContent = (mm && len) ? (mm / len).toFixed(5) : '—';
+    }
+    _calib.raf = requestAnimationFrame(loopCalib);
+}
+
+function closeGdtCalib() {
+    if (!_calib) return;
+    if (_calib.raf) cancelAnimationFrame(_calib.raf);
+    if (_calib.stream) _calib.stream.getTracks().forEach(t => t.stop());
+    if (_calib.overlay && _calib.overlay.parentNode) _calib.overlay.remove();
+    _calib = null;
+}
+
+async function saveAddonRules() {
+    const st = document.getElementById('ruleSaveStatus');
+    const addons = currentModel.addons || [];
+    // Add-on tidak diubah di sini — hanya menyimpan PARAMETER untuk yang aktif.
+    const addonConfig = Object.assign({}, currentModel.addonConfig || {});
+    const el = id => document.getElementById(id);
+    const num = id => { const e = el(id); if (!e) return null; const v = parseFloat(e.value); return Number.isFinite(v) ? v : null; };
+
+    if (addons.includes('Count') && el('ruleCountExpected')) {
+        addonConfig.countExpected = parseInt(el('ruleCountExpected').value, 10) || 0;
+    }
+    if (addons.includes('GD&T Measurement') && el('gdtMmPerPx')) {
+        const gdt = { mmPerPixel: num('gdtMmPerPx'), perClass: {} };
+        (currentModel.classes || []).forEach((cls, i) => {
+            if (!el('gdtMeasure_' + i)) return;
+            gdt.perClass[cls] = {
+                measure: el('gdtMeasure_' + i).value,
+                nominalMM: num('gdtNominal_' + i),
+                toleranceMM: num('gdtTol_' + i) != null ? num('gdtTol_' + i) : 0.1,
+            };
+        });
+        addonConfig.gdt = gdt;
+    }
+    try {
+        await window.api.updateModel(projectName, modelName, { addonConfig });
+        currentModel.addonConfig = addonConfig;
+        if (st) st.textContent = '✓ Tersimpan';
+        renderAddonRules();
+    } catch (e) {
+        if (st) st.textContent = '❌ ' + e.message;
+    }
+}
+
 function drawChart(canvasId, series, opts) {
     opts = opts || {};
     const cv = document.getElementById(canvasId);

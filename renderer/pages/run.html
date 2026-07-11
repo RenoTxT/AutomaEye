@@ -96,7 +96,7 @@ function renderPalette(latestResult) {
                         const cls = r ? (r.verdict === 'OK' ? 'ok' : 'ng') : '';
                         return `<div class="palette-step">
                             <span class="step-num">${s.stepIndex}</span>
-                            <span>${esc(s.modelName)}</span>
+                            <span>${esc(s.modelName || s.label || s.tool || s.category)}</span>
                             <span class="verdict-dot ${cls}"></span>
                         </div>`;
                     }).join('') : '<div class="palette-empty">(kosong)</div>'}
@@ -165,7 +165,7 @@ function renderResult(result, dataUrl) {
     document.getElementById('stepRows').innerHTML = result.steps.map(s => `
         <tr class="${s.verdict === 'OK' ? 'ok' : 'ng'}">
             <td>${s.stepIndex}</td>
-            <td>${esc(s.modelName)}</td>
+            <td>${esc(s.modelName || s.label || s.category)}${s.reason ? `<br><span class="muted" style="font-size:11px">${esc(s.reason)}</span>` : ''}</td>
             <td>${esc(s.verdict)}</td>
             <td>${(s.confidence || 0).toFixed(2)}</td>
         </tr>

@@ -148,8 +148,8 @@ ipcMain.handle('projects:delete', (_, name) =>
     projects.delete(projectsRoot, name));
 
 // ---- Models ----
-ipcMain.handle('models:create', (_, { project, name, aiType, addons, classes }) =>
-    projects.addModel(projectsRoot, project, { name, aiType, addons, classes }));
+ipcMain.handle('models:create', (_, { project, name, aiType, addons, classes, addonConfig }) =>
+    projects.addModel(projectsRoot, project, { name, aiType, addons, classes, addonConfig }));
 ipcMain.handle('models:update', (_, { project, name, patch }) =>
     projects.updateModel(projectsRoot, project, name, patch));
 ipcMain.handle('models:delete', (_, { project, name }) =>

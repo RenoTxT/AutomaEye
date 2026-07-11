@@ -264,6 +264,11 @@ async function autoSetup() {
             ? `✓ Project sudah ada (ID ${res.project.id}).`
             : `✓ Project dibuat (ID ${res.project.id}).`;
         let msg = `${prefix} Found ${res.found} gambar di dataset, uploaded ${res.imported}.`;
+        if (res.restored && res.restored.loaded > 0) {
+            msg += `<br>🔁 ${res.restored.loaded} anotasi lama dipulihkan dari dataset (git) — langsung bisa diedit di device ini.`;
+        } else if (res.restored && res.restored.skipped > 0) {
+            msg += `<br>🔁 Anotasi sudah ada di ${res.restored.skipped} task (tidak ditimpa).`;
+        }
         if (res.errors && res.errors.length > 0) {
             msg += `<br><br>⚠️ ${res.errors.length} error saat upload:<br>`;
             msg += res.errors.slice(0, 5).map(e => `<code style="font-size:10px">${esc(e)}</code>`).join('<br>');

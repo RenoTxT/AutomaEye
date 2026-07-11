@@ -58,7 +58,7 @@ async function render() {
             const trained = m.trained ? `<span class="badge ok">mAP ${(m.lastMAP || 0).toFixed(2)}</span>` : '<span class="badge">untrained</span>';
             const addons = (m.addons || []).map(a => `<span class="tag">${esc(a)}</span>`).join('') || '<span class="muted">—</span>';
             const classes = m.classes.map(c => `<span class="tag">${esc(c)}</span>`).join('');
-            return `<tr>
+            return `<tr data-model="${esc(m.name)}" oncontextmenu="showModelMenu(event, this)" style="cursor:context-menu">
                 <td><strong>${esc(m.name)}</strong></td>
                 <td>${esc(m.type)}</td>
                 <td>${addons}</td>
@@ -71,7 +71,8 @@ async function render() {
         mList.innerHTML = `<table class="table" style="border:0">
             <thead><tr><th>Nama</th><th>Type</th><th>Add-ons</th><th>Classes</th><th>Train / Anot</th><th>Status</th><th></th></tr></thead>
             <tbody>${rows.join('')}</tbody>
-        </table>`;
+        </table>
+        <p class="muted" style="font-size:11px;margin:6px 2px 0">Klik kanan baris model untuk menu (Buka · Hapus).</p>`;
     }
 
     const wf = document.getElementById('workflowView');
@@ -88,6 +89,53 @@ async function render() {
 
 function newModel() { window.api.goTo(`new_model.html?project=${encodeURIComponent(projectName)}`); }
 function openModel(name) { window.api.goTo(`model.html?project=${encodeURIComponent(projectName)}&model=${encodeURIComponent(name)}`); }
+
+// ==== Menu klik-kanan pada baris model (Buka / Hapus) ====
+function showModelMenu(e, tr) {
+    e.preventDefault();
+    hideModelMenu();
+    const name = tr.dataset.model;
+    const menu = document.createElement('div');
+    menu.id = 'modelCtxMenu';
+    menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:3000;background:var(--panel,#fff);color:var(--text,inherit);border:1px solid var(--border,#ccc);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.3);padding:4px;min-width:160px`;
+    const item = 'display:block;width:100%;text-align:left;background:none;border:none;color:inherit;padding:8px 12px;font-size:13px;border-radius:4px;cursor:pointer';
+    menu.innerHTML = `
+        <button style="${item}">📂 Buka</button>
+        <button style="${item};color:#ef4444">🗑 Hapus Model</button>`;
+    document.body.appendChild(menu);
+    const btns = menu.querySelectorAll('button');
+    btns.forEach(b => b.onmouseenter = () => b.style.background = 'var(--panel-alt, rgba(128,128,128,.15))');
+    btns.forEach(b => b.onmouseleave = () => b.style.background = 'none');
+    btns[0].onclick = () => { hideModelMenu(); openModel(name); };
+    btns[1].onclick = () => { hideModelMenu(); confirmDeleteModel(name); };
+}
+function hideModelMenu() { const m = document.getElementById('modelCtxMenu'); if (m) m.remove(); }
+document.addEventListener('click', hideModelMenu);
+window.addEventListener('scroll', hideModelMenu, true);
+
+function confirmDeleteModel(name) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3100;display:flex;align-items:center;justify-content:center;padding:14px';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel,#fff);color:var(--text,inherit);border:1px solid var(--border,#ccc);border-radius:8px;padding:20px;max-width:440px';
+    box.innerHTML = `<h3 style="margin-top:0">Hapus model "${esc(name)}"?</h3>
+        <p class="muted" style="font-size:13px">Ini menghapus permanen folder model tersebut: dataset, anotasi, dan bobot (.pt). Step Workflow yang memakainya juga akan dilepas. Tidak bisa dibatalkan.</p>
+        <div class="row" style="justify-content:flex-end;gap:8px">
+            <button class="btn" id="dmCancel">Batal</button>
+            <button class="btn danger" id="dmOk">🗑 Hapus</button>
+        </div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    box.querySelector('#dmCancel').onclick = () => overlay.remove();
+    box.querySelector('#dmOk').onclick = async () => {
+        try {
+            await window.api.deleteModel(projectName, name);
+            overlay.remove();
+            render();
+        } catch (e2) { alert('Gagal hapus: ' + e2.message); }
+    };
+}
 function openAI() { window.api.goTo(`ai.html?project=${encodeURIComponent(projectName)}`); }
 function editWorkflow() {
     if (!currentProject.models.length) { alert('Buat model dulu'); return; }

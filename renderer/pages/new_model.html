@@ -23,6 +23,11 @@
         <div class="section-title">Rule-based Tools (opsional, kombinasikan dengan AI)</div>
         <div style="padding:12px">
             <div class="grid-3" id="addonTiles"></div>
+            <div id="countCfg" style="display:none; margin-top:12px">
+                <label>Jumlah objek yang diharapkan (Count) — OK kalau jumlah deteksi tepat sama
+                    <input type="number" id="countExpected" min="0" value="1" style="width:120px">
+                </label>
+            </div>
         </div>
     </div>
 
@@ -58,6 +63,7 @@ function renderTiles() {
     document.getElementById('addonTiles').innerHTML = ADDONS.map(a =>
         `<div class="tile ${selectedAddons.has(a) ? 'active' : ''}" onclick="toggleAddon('${esc(a)}')">${esc(a)}</div>`
     ).join('');
+    document.getElementById('countCfg').style.display = selectedAddons.has('Count') ? '' : 'none';
 }
 function setAI(t) { aiType = t; renderTiles(); }
 function toggleAddon(a) {
@@ -72,8 +78,12 @@ async function submit() {
     const classes = classesStr.split(',').map(s => s.trim()).filter(Boolean);
     if (!classes.length) { alert('Kelas minimal 1'); return; }
     try {
+        const addonConfig = {};
+        if (selectedAddons.has('Count')) {
+            addonConfig.countExpected = parseInt(document.getElementById('countExpected').value, 10) || 0;
+        }
         await window.api.createModel(projectName, {
-            name, aiType, addons: Array.from(selectedAddons), classes,
+            name, aiType, addons: Array.from(selectedAddons), classes, addonConfig,
         });
         window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
     } catch (e) { alert('Gagal: ' + e.message); }

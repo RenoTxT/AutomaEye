@@ -29,7 +29,7 @@ auto_calibration:
   api_key: ''
 annotation:
   command: python python/run_label_studio.py start
-  access_token: 0e98a2f26e7f99f8a4747408eeb11efb9b24a28c
+  access_token: b5253d329fc359270516858f39a48a00a8d11475
 paths:
   projects_root: projects
 output:

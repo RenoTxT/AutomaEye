@@ -38,6 +38,22 @@ const projectName = param('project');
 document.getElementById('backLink').onclick = () => window.api.goTo(`project.html?name=${encodeURIComponent(projectName)}`);
 
 const CATEGORIES = ['Capture', 'Positioning', 'Inspection', 'Communication', 'Options'];
+// Kategori yang memakai MODEL AI (butuh model terlatih). Lainnya pakai "tool".
+const MODEL_CATS = ['Inspection', 'Positioning'];
+// Katalog tool non-AI per kategori (Capture/Communication/Options).
+const TOOLS = {
+    Capture: [
+        { tool: 'camera', label: 'Kamera / Webcam', config: { source: 'kamera', minKB: 0 } },
+        { tool: 'file', label: 'Muat dari File', config: { source: 'file', minKB: 0 } },
+    ],
+    Communication: [
+        { tool: 'arduino', label: 'Sinyal Arduino/PLC', config: { signalOK: '0', signalNG: '1', onlyOnNG: true } },
+        { tool: 'log', label: 'Catat Log CSV', config: {} },
+    ],
+    Options: [
+        { tool: 'save', label: 'Simpan Gambar', config: { saveOK: false, saveNG: true } },
+    ],
+};
 let steps = [];
 let availableModels = [];
 let selectedIdx = -1;
@@ -65,7 +81,7 @@ function render() {
                         const idx = steps.indexOf(s);
                         return `<div class="palette-step ${idx === selectedIdx ? 'selected' : ''}" onclick="selectStep(${idx})">
                             <span class="step-num">${idx + 1}</span>
-                            <span>${esc(s.modelName)}</span>
+                            <span>${esc(s.modelName || s.label || s.tool || s.category)}</span>
                             <span class="verdict-dot"></span>
                         </div>`;
                     }).join('') : '<div class="palette-empty">(kosong)</div>'}
@@ -91,16 +107,22 @@ function renderProps() {
         return;
     }
     const s = steps[selectedIdx];
-    const m = availableModels.find(x => x.name === s.modelName);
-    const trained = m && m.trained ? `mAP=${(m.lastMAP || 0).toFixed(3)}` : 'belum trained';
-    body.innerHTML = `<h3>Step [${selectedIdx + 1}] — ${esc(s.modelName)}</h3>
-        <p class="muted">Type: <strong>${m ? esc(m.type) : '?'}</strong><br>Status: ${trained}</p>
+    const isModel = !!s.modelName;
+    let head, configHtml = '';
+    if (isModel) {
+        const m = availableModels.find(x => x.name === s.modelName);
+        const trained = m && m.trained ? `mAP=${(m.lastMAP || 0).toFixed(3)}` : 'belum trained';
+        head = `<h3>Step [${selectedIdx + 1}] — ${esc(s.modelName)}</h3>
+            <p class="muted">Type: <strong>${m ? esc(m.type) : '?'}</strong> · Status: ${trained}<br>
+            ${s.category === 'Positioning' ? 'Peran: mengunci lokasi part (bukan menilai).' : 'Peran: menilai OK/NG lewat add-on.'}</p>`;
+    } else {
+        head = `<h3>Step [${selectedIdx + 1}] — ${esc(s.label || s.tool)}</h3>
+            <p class="muted">Tool ${esc(s.category)}.</p>`;
+        configHtml = renderStepConfig(s);
+    }
+    body.innerHTML = `${head}
         <hr style="margin:12px 0; border:none; border-top:1px solid var(--border);">
-        <label>Category
-            <select onchange="updateStep('category', this.value)">
-                ${CATEGORIES.map(c => `<option ${s.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
-            </select>
-        </label>
+        ${configHtml}
         <label>Continue on
             <select onchange="updateStep('continueOn', this.value)">
                 <option ${s.continueOn === 'always' ? 'selected' : ''}>always</option>
@@ -122,24 +144,63 @@ function renderProps() {
         </label>`;
 }
 
-// Pemilih model berbasis modal (prompt() TIDAK didukung di Electron —
-// itu sebabnya tombol + dulu terasa "tidak ada opsi").
+// Editor konfigurasi untuk step non-model (Capture/Communication/Options).
+function renderStepConfig(s) {
+    const c = s.config || {};
+    if (s.category === 'Capture') {
+        return `<label>Sumber
+                <select onchange="updateStepConfig('source', this.value)">
+                    <option value="kamera" ${c.source === 'kamera' ? 'selected' : ''}>Kamera / Webcam</option>
+                    <option value="file" ${c.source === 'file' ? 'selected' : ''}>Muat dari File</option>
+                </select></label>
+            <label>Min. ukuran gambar (KB) — 0 = mati
+                <input type="number" min="0" value="${c.minKB || 0}" onchange="updateStepConfig('minKB', parseInt(this.value)||0)"></label>
+            <p class="muted" style="font-size:11px">Gate opsional: tolak gambar terlalu kecil/kosong (indikasi gagal capture).</p>`;
+    }
+    if (s.category === 'Communication') {
+        if (s.tool === 'log') return `<p class="muted" style="font-size:12px">Menulis hasil ke daily_summary.csv (otomatis). Tidak ada parameter.</p>`;
+        return `<label>Sinyal saat OK <input type="text" value="${esc(c.signalOK != null ? c.signalOK : '0')}" onchange="updateStepConfig('signalOK', this.value)"></label>
+            <label>Sinyal saat NG <input type="text" value="${esc(c.signalNG != null ? c.signalNG : '1')}" onchange="updateStepConfig('signalNG', this.value)"></label>
+            <label style="display:block"><input type="checkbox" ${c.onlyOnNG !== false ? 'checked' : ''} onchange="updateStepConfig('onlyOnNG', this.checked)"> Kirim hanya saat NG</label>
+            <p class="muted" style="font-size:11px">Butuh Arduino terhubung (Settings → COM port).</p>`;
+    }
+    if (s.category === 'Options') {
+        return `<label style="display:block"><input type="checkbox" ${c.saveOK ? 'checked' : ''} onchange="updateStepConfig('saveOK', this.checked)"> Simpan gambar OK</label>
+            <label style="display:block"><input type="checkbox" ${c.saveNG !== false ? 'checked' : ''} onchange="updateStepConfig('saveNG', this.checked)"> Simpan gambar NG</label>
+            <p class="muted" style="font-size:11px">Gambar tersimpan di folder outputs/ project.</p>`;
+    }
+    return '';
+}
+
+function updateStepConfig(key, value) {
+    if (selectedIdx < 0) return;
+    const s = steps[selectedIdx];
+    s.config = s.config || {};
+    s.config[key] = value;
+}
+
+// Pemilih step berbasis modal (prompt() TIDAK didukung di Electron).
+// Inspection & Positioning → pilih MODEL AI. Capture/Communication/Options → pilih TOOL.
 function addStep(cat) {
     closePicker();
+    const isModelCat = MODEL_CATS.includes(cat);
     const overlay = document.createElement('div');
     overlay.id = 'modelPicker';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000';
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--panel,#fff);color:var(--text,inherit);border:1px solid var(--border,#ccc);border-radius:8px;padding:18px;min-width:340px;max-width:90%;max-height:80vh;overflow:auto';
-    if (!availableModels.length) {
+
+    if (isModelCat && !availableModels.length) {
         box.innerHTML = `<h3 style="margin-top:0">Tambah step — ${esc(cat)}</h3>
             <p class="muted">Belum ada model di project ini. Buat &amp; latih model dulu:
-            <strong>Project → + New Model → Dataset → Annotate → Train</strong>. Setelah model ada,
-            model itu bisa dipilih sebagai step di sini.</p>
+            <strong>Project → + New Model → Dataset → Annotate → Train</strong>.</p>
             <div class="row" style="justify-content:flex-end"><button class="btn" id="pkClose">Tutup</button></div>`;
     } else {
+        const hint = isModelCat
+            ? 'Pilih model AI yang dijalankan pada langkah ini:'
+            : 'Pilih tool untuk langkah ini:';
         box.innerHTML = `<h3 style="margin-top:0">Tambah step ke <em>${esc(cat)}</em></h3>
-            <p class="muted">Pilih model AI yang dijalankan pada langkah ini:</p>
+            <p class="muted">${hint}</p>
             <div id="pkList" style="display:flex;flex-direction:column;gap:6px;margin:10px 0"></div>
             <div class="row" style="justify-content:flex-end"><button class="btn" id="pkClose">Tutup</button></div>`;
     }
@@ -150,16 +211,31 @@ function addStep(cat) {
     if (closeBtn) closeBtn.onclick = closePicker;
 
     const list = box.querySelector('#pkList');
-    if (list) {
+    if (!list) return;
+
+    if (isModelCat) {
         availableModels.forEach(m => {
             const btn = document.createElement('button');
             btn.className = 'btn';
             btn.style.cssText = 'text-align:left;justify-content:flex-start';
             btn.innerHTML = `<strong>${esc(m.name)}</strong> ` +
-                `<span class="muted" style="font-size:11px">— ${esc(m.type)}` +
-                `${m.trained ? ' · trained' : ' · belum trained'}</span>`;
+                `<span class="muted" style="font-size:11px">— ${esc(m.type)}${m.trained ? ' · trained' : ' · belum trained'}</span>`;
             btn.onclick = () => {
                 steps.push({ modelName: m.name, category: cat, continueOn: 'always' });
+                selectedIdx = steps.length - 1;
+                closePicker();
+                render();
+            };
+            list.appendChild(btn);
+        });
+    } else {
+        (TOOLS[cat] || []).forEach(t => {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.style.cssText = 'text-align:left;justify-content:flex-start';
+            btn.innerHTML = `<strong>${esc(t.label)}</strong>`;
+            btn.onclick = () => {
+                steps.push({ category: cat, tool: t.tool, label: t.label, config: { ...t.config }, continueOn: 'always' });
                 selectedIdx = steps.length - 1;
                 closePicker();
                 render();
