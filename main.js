@@ -38,7 +38,15 @@ const CONFIG_PATH = path.join(__dirname, 'config.yaml');
 
 function loadConfig() {
     if (!fs.existsSync(CONFIG_PATH)) {
-        throw new Error('config.yaml tidak ada di ' + CONFIG_PATH);
+        // config.yaml di-gitignore (berisi kunci per-device). Kalau belum ada
+        // — mis. setelah clone bersih — buat otomatis dari template.
+        const example = path.join(__dirname, 'config.example.yaml');
+        if (fs.existsSync(example)) {
+            fs.copyFileSync(example, CONFIG_PATH);
+            console.log('[config] config.yaml dibuat dari config.example.yaml (isi kunci di Settings).');
+        } else {
+            throw new Error('config.yaml & config.example.yaml tidak ada di ' + __dirname);
+        }
     }
     cfg = yaml.load(fs.readFileSync(CONFIG_PATH, 'utf8'));
     console.log(`[config] Loaded from ${CONFIG_PATH}`);

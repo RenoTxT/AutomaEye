@@ -1,3 +1,7 @@
+# ===== AutomaEyes — TEMPLATE config =====
+# Salin otomatis jadi config.yaml saat app pertama jalan (kalau config.yaml belum ada).
+# Isi KUNCI/SECRET (api_key, access_token) lewat menu Settings di aplikasi —
+# TERSIMPAN ke config.yaml yang SUDAH di-gitignore, jadi tidak ikut ter-push ke GitHub.
 app:
   name: AutomaEyes — Socket Holder Inspector
   version: 0.1.0
@@ -29,7 +33,7 @@ auto_calibration:
   api_key: ''
 annotation:
   command: python python/run_label_studio.py start
-  access_token: b5253d329fc359270516858f39a48a00a8d11475
+  access_token: ''
 paths:
   projects_root: projects
 output:

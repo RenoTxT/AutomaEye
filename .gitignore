@@ -13,6 +13,9 @@ python/ls-venv/
 **/__pycache__/
 *.pyc
 
+# Kunci/secret per-device — JANGAN di-commit. Template ada di config.example.yaml
+config.yaml
+
 # Log & sampah OS
 *.log
 Thumbs.db
