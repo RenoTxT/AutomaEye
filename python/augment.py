@@ -1,20 +1,21 @@
 """
 Dataset augmentation — output SEPARATE file per aug type per source image,
-DAN ikut men-transform label bounding box (YOLO format) supaya anotasi
-tetap valid di gambar hasil augmentasi.
+DAN ikut men-transform label supaya anotasi tetap valid di gambar hasil.
+
+Mendukung DUA format label YOLO:
+  * Detection (bounding box): "cls cx cy w h"            (4 koordinat)
+  * Segmentation (polygon)  : "cls x1 y1 x2 y2 ... xn yn" (>=6, genap)
 
 Logika:
-  Untuk tiap gambar asli yang PUNYA label:
-    Untuk tiap aug type enabled, tiap multiplier index:
-      - Apply HANYA aug type ini (bukan kombinasi) ke gambar
-      - Transform label sesuai aug:
-          * geometric (rotate / flip-h / flip-v) → koordinat box diubah
-          * photometric (blur / exposure / noise) → label disalin apa adanya
-      - Save <stem>.<augtype>.aug<i>.jpg + <stem>.<augtype>.aug<i>.txt
+  Untuk tiap gambar asli yang PUNYA label, untuk tiap aug type enabled &
+  tiap multiplier index:
+    - Apply HANYA aug type ini ke gambar
+    - Transform label sesuai aug:
+        * geometric (rotate / flip-h / flip-v) -> koordinat diubah
+        * photometric (blur / exposure / noise) -> label disalin apa adanya
+    - Save <stem>.<augtype>.aug<i>.jpg + .txt
 
-Gambar tanpa label DILEWATI (biar dataset augmentasi tetap punya anotasi).
-Progress di-stream ke stdout: "PROGRESS <done>/<total>" supaya Electron bisa
-tampilkan bar persen.
+Gambar tanpa label DILEWATI. Progress: "PROGRESS <done>/<total>".
 """
 import argparse
 import random
@@ -49,78 +50,95 @@ def apply_noise(img, sigma):
     return np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
 
 
-# ---------- Label (YOLO bbox) transforms ----------
-# box = (cls_str, cx, cy, w, h) semua normalized 0..1
-
-def boxes_fliph(boxes):
-    return [(c, 1.0 - cx, cy, bw, bh) for (c, cx, cy, bw, bh) in boxes]
-
-
-def boxes_flipv(boxes):
-    return [(c, cx, 1.0 - cy, bw, bh) for (c, cx, cy, bw, bh) in boxes]
-
-
-def boxes_rotate(boxes, M, w, h):
-    """Rotate tiap box pakai matrix affine yang SAMA dengan gambar (M dari
-    cv2.getRotationMatrix2D), lalu ambil axis-aligned bounding box dari 4 sudut
-    yang sudah diputar. Box yang keluar frame di-clip; kalau habis, dibuang."""
-    out = []
-    for (c, cx, cy, bw, bh) in boxes:
-        px, py = cx * w, cy * h
-        pw, ph = bw * w, bh * h
-        corners = [
-            (px - pw / 2, py - ph / 2),
-            (px + pw / 2, py - ph / 2),
-            (px + pw / 2, py + ph / 2),
-            (px - pw / 2, py + ph / 2),
-        ]
-        xs, ys = [], []
-        for (X, Y) in corners:
-            nx = M[0, 0] * X + M[0, 1] * Y + M[0, 2]
-            ny = M[1, 0] * X + M[1, 1] * Y + M[1, 2]
-            xs.append(nx)
-            ys.append(ny)
-        x1 = max(0.0, min(xs))
-        y1 = max(0.0, min(ys))
-        x2 = min(float(w), max(xs))
-        y2 = min(float(h), max(ys))
-        if x2 <= x1 or y2 <= y1:
-            continue  # box keluar frame sepenuhnya
-        out.append((
-            c,
-            ((x1 + x2) / 2) / w,
-            ((y1 + y2) / 2) / h,
-            (x2 - x1) / w,
-            (y2 - y1) / h,
-        ))
-    return out
-
+# ---------- Label parsing ----------
+# item = (cls_str, vals[list of float], is_poly[bool])
+#   bbox    : vals = [cx, cy, w, h]
+#   polygon : vals = [x1, y1, x2, y2, ...]  (semua normalized 0..1)
 
 def read_label(p):
-    boxes = []
-    if p.exists():
-        for line in p.read_text().splitlines():
-            parts = line.split()
-            if len(parts) >= 5:
-                try:
-                    cx, cy, bw, bh = map(float, parts[1:5])
-                except ValueError:
-                    continue
-                boxes.append((parts[0], cx, cy, bw, bh))
-    return boxes
+    items = []
+    if not p.exists():
+        return items
+    for line in p.read_text().splitlines():
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        cls = parts[0]
+        try:
+            vals = list(map(float, parts[1:]))
+        except ValueError:
+            continue
+        if len(vals) == 4:
+            items.append((cls, vals, False))                 # bbox
+        elif len(vals) >= 6 and len(vals) % 2 == 0:
+            items.append((cls, vals, True))                  # polygon
+    return items
 
 
-def write_label(p, boxes):
-    lines = [f"{c} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}"
-             for (c, cx, cy, bw, bh) in boxes]
+def write_label(p, items):
+    lines = [cls + " " + " ".join(f"{v:.6f}" for v in vals)
+             for (cls, vals, _poly) in items]
     p.write_text(("\n".join(lines) + "\n") if lines else "")
+
+
+def _clamp(v):
+    return 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
+
+
+# ---------- Label transforms (format-aware) ----------
+
+def flip_item(cls, vals, is_poly, axis):
+    """axis 'h' -> mirror X, axis 'v' -> mirror Y."""
+    if is_poly:
+        out = []
+        for i, v in enumerate(vals):
+            flip_this = (axis == 'h' and i % 2 == 0) or (axis == 'v' and i % 2 == 1)
+            out.append(1.0 - v if flip_this else v)
+        return (cls, out, True)
+    cx, cy, bw, bh = vals
+    if axis == 'h':
+        cx = 1.0 - cx
+    else:
+        cy = 1.0 - cy
+    return (cls, [cx, cy, bw, bh], False)
+
+
+def rotate_item(cls, vals, is_poly, M, w, h):
+    """Putar pakai matrix affine yang SAMA dengan gambar. Poligon: tiap titik
+    ditransform lalu di-clamp ke [0,1]. Bbox: ambil axis-aligned box dari 4 sudut."""
+    def tf(x, y):
+        return (M[0, 0] * x + M[0, 1] * y + M[0, 2],
+                M[1, 0] * x + M[1, 1] * y + M[1, 2])
+    if is_poly:
+        out = []
+        for i in range(0, len(vals), 2):
+            nx, ny = tf(vals[i] * w, vals[i + 1] * h)
+            out.append(_clamp(nx / w))
+            out.append(_clamp(ny / h))
+        return (cls, out, True)
+    cx, cy, bw, bh = vals
+    px, py, pw, ph = cx * w, cy * h, bw * w, bh * h
+    corners = [(px - pw / 2, py - ph / 2), (px + pw / 2, py - ph / 2),
+               (px + pw / 2, py + ph / 2), (px - pw / 2, py + ph / 2)]
+    xs, ys = [], []
+    for (X, Y) in corners:
+        nx, ny = tf(X, Y)
+        xs.append(nx)
+        ys.append(ny)
+    x1 = max(0.0, min(xs))
+    y1 = max(0.0, min(ys))
+    x2 = min(float(w), max(xs))
+    y2 = min(float(h), max(ys))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return (cls, [((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h,
+                  (x2 - x1) / w, (y2 - y1) / h], False)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", required=True)
     ap.add_argument("--multiplier", type=int, default=2)
-
     ap.add_argument("--rotate", action="store_true")
     ap.add_argument("--rotate-max", type=float, default=15.0)
     ap.add_argument("--flip-h", action="store_true")
@@ -131,7 +149,6 @@ def main():
     ap.add_argument("--exposure-alpha", type=float, default=1.2)
     ap.add_argument("--noise", action="store_true")
     ap.add_argument("--noise-sigma", type=float, default=8.0)
-
     args = ap.parse_args()
 
     base = Path(args.dir)
@@ -143,7 +160,6 @@ def main():
         return
     lbl_dir_exists = lbl_dir.exists()
 
-    # Daftar aug type enabled. Tiap entry: (name, kind)
     enabled = []
     if args.rotate:
         enabled.append(("rotate", "rotate"))
@@ -157,13 +173,11 @@ def main():
         enabled.append(("exposure", "exposure"))
     if args.noise:
         enabled.append(("noise", "noise"))
-
     if not enabled:
         print("generated: 0", flush=True)
         print("[!] Tidak ada augmentasi enabled", flush=True)
         return
 
-    # Kumpulkan gambar asli (bukan hasil augment) yang PUNYA label
     sources = []
     skipped_no_label = 0
     for img_path in sorted(src_dir.iterdir()):
@@ -195,7 +209,7 @@ def main():
             print(f"PROGRESS {done}/{total}", flush=True)
             continue
         h, w = img.shape[:2]
-        boxes = read_label(lbl_path)
+        items = read_label(lbl_path)
         stem = img_path.stem
 
         for aug_name, kind in enabled:
@@ -205,29 +219,31 @@ def main():
                         angle = random.uniform(-args.rotate_max, args.rotate_max)
                         M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
                         out_img = cv2.warpAffine(img, M, (w, h))
-                        out_boxes = boxes_rotate(boxes, M, w, h)
+                        out_items = [r for r in
+                                     (rotate_item(c, v, p, M, w, h) for (c, v, p) in items)
+                                     if r]
                     elif kind == "fliph":
                         out_img = apply_flip_h(img)
-                        out_boxes = boxes_fliph(boxes)
+                        out_items = [flip_item(c, v, p, 'h') for (c, v, p) in items]
                     elif kind == "flipv":
                         out_img = apply_flip_v(img)
-                        out_boxes = boxes_flipv(boxes)
+                        out_items = [flip_item(c, v, p, 'v') for (c, v, p) in items]
                     elif kind == "blur":
                         out_img = apply_blur(img, args.blur_sigma)
-                        out_boxes = list(boxes)
+                        out_items = list(items)
                     elif kind == "exposure":
                         out_img = apply_exposure(img, args.exposure_alpha)
-                        out_boxes = list(boxes)
+                        out_items = list(items)
                     elif kind == "noise":
                         out_img = apply_noise(img, args.noise_sigma)
-                        out_boxes = list(boxes)
+                        out_items = list(items)
                     else:
                         continue
 
                     out_img_path = src_dir / f"{stem}.{aug_name}.aug{i}.jpg"
                     out_lbl_path = lbl_dir / f"{stem}.{aug_name}.aug{i}.txt"
                     cv2.imwrite(str(out_img_path), out_img)
-                    write_label(out_lbl_path, out_boxes)
+                    write_label(out_lbl_path, out_items)
                     generated += 1
                 except Exception as e:
                     print(f"[!] {aug_name} on {img_path.name}: {e}", flush=True)
