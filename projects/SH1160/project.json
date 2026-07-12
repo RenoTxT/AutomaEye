@@ -2,7 +2,7 @@
   "name": "SH1160",
   "description": "AI detection untuk Socket Holder 1160",
   "createdAt": "2026-07-11T03:07:48.055Z",
-  "updatedAt": "2026-07-12T08:31:14.405Z",
+  "updatedAt": "2026-07-12T15:55:11.857Z",
   "models": [
     {
       "name": "Object Detector",
@@ -56,13 +56,13 @@
         "augExposure": true,
         "augNoise": false
       },
-      "trained": false,
+      "trained": true,
       "createdAt": "2026-07-12T08:31:14.405Z",
-      "updatedAt": "2026-07-12T08:31:14.405Z",
-      "lastMAP": 0,
-      "lastPrecision": 0,
-      "lastRecall": 0,
-      "lastF1": 0
+      "updatedAt": "2026-07-12T15:55:11.857Z",
+      "lastMAP": 0.995,
+      "lastPrecision": 0.992,
+      "lastRecall": 0.9976,
+      "lastF1": 0.9947921190188983
     }
   ],
   "workflow": {
