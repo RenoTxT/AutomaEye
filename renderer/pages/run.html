@@ -27,6 +27,7 @@
             <div class="image-viewer">
                 <video id="cam" autoplay muted playsinline style="display:none"></video>
                 <img id="snapImg" class="snapshot" style="display:none" />
+                <canvas id="snapView" class="snapshot" style="display:none; max-width:100%; height:auto"></canvas>
                 <canvas id="snap" style="display:none"></canvas>
                 <div id="noSignal" style="color:#666">📷 Klik Start Camera</div>
             </div>
@@ -150,16 +151,55 @@ async function capture() {
         alert('Inspect error: ' + e.message);
     }
 
-    // Show video again after 1 sec
+    // Show video again after a moment (overlay hasil tampil lebih lama)
     setTimeout(() => {
         snapImg.style.display = 'none';
+        const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
         video.style.display = 'block';
-    }, 1200);
+    }, 2500);
+}
+
+// Gambar citra hasil + kotak & ANGKA ukuran GD&T di lokasi tiap fitur.
+function drawOverlay(result, dataUrl) {
+    const cv = document.getElementById('snapView');
+    if (!cv) return;
+    const img = new Image();
+    img.onload = () => {
+        cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const fs = Math.max(16, Math.round(cv.width / 55));
+        ctx.font = `bold ${fs}px sans-serif`; ctx.textBaseline = 'top';
+        ctx.lineWidth = Math.max(2, cv.width / 500);
+        (result.steps || []).forEach(s => {
+            (s.detections || []).forEach(d => {
+                if (!d.gdt) return;
+                const labels = Array.isArray(d.gdt) ? d.gdt : [d.gdt];
+                const anyNG = labels.some(l => !l.ok);
+                // kotak fitur (merah kalau ada yang di luar toleransi)
+                ctx.strokeStyle = anyNG ? '#ef4444' : '#22c55e';
+                ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+                // tumpuk label di atas fitur (satu baris per ukuran)
+                let ly = Math.max(0, d.y1 - (fs + 6) * labels.length - 2);
+                labels.forEach(l => {
+                    const col = l.ok ? '#22c55e' : '#ef4444';
+                    const tw = ctx.measureText(l.text).width;
+                    ctx.fillStyle = col; ctx.fillRect(d.x1, ly, tw + 12, fs + 6);
+                    ctx.fillStyle = '#fff'; ctx.fillText(l.text, d.x1 + 6, ly + 3);
+                    ly += fs + 6;
+                });
+            });
+        });
+        document.getElementById('snapImg').style.display = 'none';
+        cv.style.display = 'block';
+    };
+    img.src = dataUrl;
 }
 
 function renderResult(result, dataUrl) {
     // Update Total Status via layout.js helper
     window.setTotalStatus(result.finalVerdict);
+    drawOverlay(result, dataUrl);
 
     // Update step rows
     document.getElementById('stepRows').innerHTML = result.steps.map(s => `

@@ -1,0 +1,4 @@
+jarak_tab
+lubang_besar
+lubang_kecil
+tinggi_tab

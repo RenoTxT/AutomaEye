@@ -82,7 +82,7 @@
                         <button class="btn" onclick="doCleanRebuild()" id="rebuildBtn">🧹 Clean &amp; Rebuild + Split</button>
                     </div>
                     <p class="muted" style="font-size:11px; margin-top:6px">
-                        <strong>Clean &amp; Rebuild</strong>: hapus semua gambar augmentasi lama + betulkan nama label biar cocok gambar, lalu split. Pakai kalau training bilang "no labels".
+                        <strong>Clean &amp; Rebuild</strong>: hapus gambar augmentasi lama + betulkan nama label + <strong>buang gambar tanpa label</strong> (mis. yang di-skip saat anotasi), lalu split. Pakai kalau training bilang "no labels" atau ada gambar kosong di dataset.
                     </p>
                     <div class="progress-bar" id="splitBar" style="display:none"><div class="progress-fill" id="splitFill" style="width:0"></div></div>
                     <p class="muted" id="splitStatus" style="margin-top:8px"></p>
@@ -757,7 +757,7 @@ async function runSplitOp(fn, isRebuild) {
         const r = await fn();
         fill.style.width = '100%';
         let msg = `✓ Split selesai — train ${r.train}, val ${r.val}, test ${r.test} (dari ${r.originals} gambar asli ber-label).`;
-        if (isRebuild) msg = `✓ Rebuild selesai — ${r.removedAug} augmentasi lama dihapus, ${r.fixedNames} nama label diperbaiki. ` + msg;
+        if (isRebuild) msg = `✓ Rebuild selesai — ${r.removedAug} augmentasi lama dihapus, ${r.fixedNames} nama label diperbaiki, ${r.removedEmpty || 0} gambar tanpa label dibuang. ` + msg;
         if (r.leakRemoved) msg += ` ${r.leakRemoved} augmentasi dari gambar val/test dibuang (anti-leakage).`;
         if (!r.hasVal) msg += ' ⚠️ Val kosong — tambah gambar/label dulu biar evaluasi jalan.';
         status.innerHTML = msg;
@@ -1213,22 +1213,27 @@ function renderAddonRules() {
     }
     if (addons.includes('GD&T Measurement')) {
         const pc = g.perClass || {};
-        const legacy = { measure: g.measure, nominalMM: g.nominalMM, toleranceMM: g.toleranceMM };
-        const classRows = (currentModel.classes || []).map((cls, i) => {
-            const s = pc[cls] || legacy || {};
-            const sm = s.measure || 'diameter';
-            return `<div style="margin:4px 0;padding:6px 8px;background:var(--panel-alt);border-radius:4px">
-                <strong>${esc(cls)}</strong>
-                <label style="margin-left:6px">Ukur
-                    <select id="gdtMeasure_${i}" style="width:110px">
-                        <option value="diameter" ${sm === 'diameter' ? 'selected' : ''}>Diameter</option>
-                        <option value="width" ${sm === 'width' ? 'selected' : ''}>Lebar</option>
-                        <option value="height" ${sm === 'height' ? 'selected' : ''}>Tinggi</option>
-                    </select></label>
-                <label>Nominal(mm) <input type="number" id="gdtNominal_${i}" step="0.01" value="${s.nominalMM != null ? s.nominalMM : ''}" style="width:90px"></label>
-                <label>Tol±(mm) <input type="number" id="gdtTol_${i}" step="0.01" value="${s.toleranceMM != null ? s.toleranceMM : 0.1}" style="width:80px"></label>
-            </div>`;
-        }).join('');
+        // Ambil spec per jenis dari format baru {dia,long,short} atau konversi format lama.
+        const specOf = (s, kind) => {
+            if (!s) return {};
+            if (s[kind]) return s[kind];
+            const old = (s.measure === 'diameter' && kind === 'dia') || (s.measure === 'height' && kind === 'long') || (s.measure === 'width' && kind === 'short');
+            return old ? { nominalMM: s.nominalMM, toleranceMM: s.toleranceMM } : {};
+        };
+        const mrow = (i, kind, label) => {
+            const sp = specOf(pc[cls_arr[i]], kind);
+            return `<div style="margin:2px 0 2px 8px;font-size:12px">${label}
+                <input type="number" id="gdt_${kind}_N_${i}" step="0.01" placeholder="nominal" value="${sp.nominalMM != null ? sp.nominalMM : ''}" style="width:80px">
+                <input type="number" id="gdt_${kind}_T_${i}" step="0.01" placeholder="tol±" value="${sp.toleranceMM != null ? sp.toleranceMM : ''}" style="width:70px"></div>`;
+        };
+        const cls_arr = currentModel.classes || [];
+        const classRows = cls_arr.map((cls, i) =>
+            `<div style="margin:6px 0;padding:6px 8px;background:var(--panel-alt);border-radius:4px">
+                <strong>${esc(cls)}</strong> <span class="muted" style="font-size:11px">(isi hanya yang perlu; kosong = tak diukur)</span>
+                ${mrow(i, 'dia', 'Diameter (bulat)')}
+                ${mrow(i, 'long', 'Sisi panjang')}
+                ${mrow(i, 'short', 'Sisi pendek')}
+            </div>`).join('');
         blocks.push(`<p style="margin:10px 0 2px"><strong>GD&amp;T Measurement</strong> — ukur dimensi <strong>per kelas</strong>.</p>
             <div style="margin:0 0 8px 4px;border-left:2px solid var(--border);padding-left:12px">
                 <p class="muted" style="font-size:11px;margin:2px 0 6px">Kalibrasi mm/piksel (berlaku semua kelas). Termudah pakai kamera + grid.</p>
@@ -1386,12 +1391,16 @@ async function saveAddonRules() {
     if (addons.includes('GD&T Measurement') && el('gdtMmPerPx')) {
         const gdt = { mmPerPixel: num('gdtMmPerPx'), perClass: {} };
         (currentModel.classes || []).forEach((cls, i) => {
-            if (!el('gdtMeasure_' + i)) return;
-            gdt.perClass[cls] = {
-                measure: el('gdtMeasure_' + i).value,
-                nominalMM: num('gdtNominal_' + i),
-                toleranceMM: num('gdtTol_' + i) != null ? num('gdtTol_' + i) : 0.1,
-            };
+            const spec = {};
+            ['dia', 'long', 'short'].forEach(kind => {
+                const nEl = el(`gdt_${kind}_N_${i}`);
+                if (!nEl) return;
+                const n = num(`gdt_${kind}_N_${i}`);
+                if (n == null) return;                       // nominal kosong → tak diukur
+                const t = num(`gdt_${kind}_T_${i}`);
+                spec[kind] = { nominalMM: n, toleranceMM: t != null ? t : 0.1 };
+            });
+            if (Object.keys(spec).length) gdt.perClass[cls] = spec;
         });
         addonConfig.gdt = gdt;
     }

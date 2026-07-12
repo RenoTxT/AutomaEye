@@ -2,7 +2,7 @@
   "name": "SH1160",
   "description": "AI detection untuk Socket Holder 1160",
   "createdAt": "2026-07-11T03:07:48.055Z",
-  "updatedAt": "2026-07-11T16:21:03.301Z",
+  "updatedAt": "2026-07-12T08:31:14.405Z",
   "models": [
     {
       "name": "Object Detector",
@@ -33,14 +33,17 @@
       "lastF1": 0.9986481750362989
     },
     {
-      "name": "Socket Measure",
+      "name": "Socket Measurement",
       "type": "AI Segmentation",
       "addons": [
         "GD&T Measurement"
       ],
       "addonConfig": {},
       "classes": [
-        "socket"
+        "lubang_kecil",
+        "lubang_besar",
+        "tinggi_tab",
+        "jarak_tab"
       ],
       "training": {
         "epochs": 100,
@@ -54,8 +57,8 @@
         "augNoise": false
       },
       "trained": false,
-      "createdAt": "2026-07-11T16:21:03.301Z",
-      "updatedAt": "2026-07-11T16:21:03.301Z",
+      "createdAt": "2026-07-12T08:31:14.405Z",
+      "updatedAt": "2026-07-12T08:31:14.405Z",
       "lastMAP": 0,
       "lastPrecision": 0,
       "lastRecall": 0,
