@@ -28,6 +28,8 @@ self_learning:
   retrain_every_n: 100
   uncertainty_low: 0.3
   uncertainty_high: 0.7
+  ai_triage: false
+  vision_model: meta/llama-3.2-11b-vision-instruct
 auto_calibration:
   enabled: false
   api_key: ''

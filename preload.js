@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('api', {
     nvidiaReport: (project, date) => ipcRenderer.invoke('nvidia:report', { project, date }),
     nvidiaAnalyze: (project, date) => ipcRenderer.invoke('nvidia:analyze', { project, date }),
     nvidiaChat: (messages) => ipcRenderer.invoke('nvidia:chat', { messages }),
+    openPath: (p) => ipcRenderer.invoke('file:open', p),
 
     // Navigation
     goTo: (page) => ipcRenderer.invoke('nav:go', page),

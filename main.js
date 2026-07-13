@@ -449,8 +449,41 @@ ipcMain.handle('selflearning:archive', (_, { project, model }) => {
 });
 
 // ---- NVIDIA NIM ----
-ipcMain.handle('nvidia:report', (_, { project, date }) =>
-    nvidia.generateReport(cfg, projectsRoot, project, date));
+ipcMain.handle('nvidia:report', async (_, { project, date }) => {
+    const r = await nvidia.generateReport(cfg, projectsRoot, project, date);
+    // Tulis juga ke XLSX (statistik + ringkasan AI) di outputs/ project.
+    try {
+        const xlsxlite = require('./lib/xlsxlite');
+        const p = projects.load(projectsRoot, project);
+        const s = r.summary || {};
+        const outDir = path.join(p.dir, 'outputs');
+        fs.mkdirSync(outDir, { recursive: true });
+        const xlsxPath = path.join(outDir, `laporan_${date}.xlsx`);
+        const rows = [
+            [`Laporan Inspeksi — ${project}`],
+            ['Tanggal', date],
+            [],
+            ['Metrik', 'Nilai'],
+            ['Total unit', s.total || 0],
+            ['OK', s.ok || 0],
+            ['NG', s.ng || 0],
+            ['Success rate (%)', s.total ? Number((s.ok / s.total * 100).toFixed(2)) : 0],
+            ['Waktu siklus rata-rata (ms)', Number((s.avgCycleMS || 0).toFixed(1))],
+            [],
+            ['NG per step', 'Jumlah'],
+            ...Object.entries(s.byStep || {}).map(([k, v]) => [k, v]),
+            [],
+            ['Ringkasan AI (NVIDIA NIM)', ''],
+            ...String(r.report || '').split(/\r?\n/).map(line => [line]),
+        ];
+        xlsxlite.write(xlsxPath, 'Laporan', rows);
+        r.xlsxPath = xlsxPath;
+    } catch (e) {
+        r.xlsxError = e.message;
+    }
+    return r;
+});
+ipcMain.handle('file:open', (_, p) => shell.openPath(p));
 ipcMain.handle('nvidia:analyze', (_, { project, date }) =>
     nvidia.analyzeNG(cfg, projectsRoot, project, date));
 ipcMain.handle('nvidia:chat', (_, { messages }) =>

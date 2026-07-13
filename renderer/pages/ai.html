@@ -25,6 +25,7 @@
                 <div style="padding:12px">
                     <label>Tanggal <input type="date" id="dateR"></label>
                     <button class="btn primary" onclick="generateReport()">Generate Report</button>
+                    <button class="btn" id="openXlsxBtn" style="display:none" onclick="openXlsx()">📊 Buka XLSX</button>
                     <p class="muted" id="statusR"></p>
                 </div>
             </div>
@@ -79,17 +80,26 @@ function showTab(btn, id) {
     document.getElementById('tab-' + id).style.display = 'block';
 }
 
+let lastXlsxPath = null;
 async function generateReport() {
     const date = document.getElementById('dateR').value;
     document.getElementById('statusR').textContent = 'Loading...';
+    document.getElementById('openXlsxBtn').style.display = 'none';
     try {
         const res = await window.api.nvidiaReport(projectName, date);
         document.getElementById('reportOut').textContent = res.report;
-        document.getElementById('statusR').textContent = '✓ Selesai';
+        lastXlsxPath = res.xlsxPath || null;
+        if (lastXlsxPath) {
+            document.getElementById('openXlsxBtn').style.display = '';
+            document.getElementById('statusR').textContent = '✓ Selesai — XLSX: ' + lastXlsxPath;
+        } else {
+            document.getElementById('statusR').textContent = '✓ Selesai' + (res.xlsxError ? ' (XLSX gagal: ' + res.xlsxError + ')' : '');
+        }
     } catch (e) {
         document.getElementById('statusR').textContent = 'Error: ' + e.message;
     }
 }
+function openXlsx() { if (lastXlsxPath) window.api.openPath(lastXlsxPath); }
 
 async function analyzeNG() {
     const date = document.getElementById('dateA').value;

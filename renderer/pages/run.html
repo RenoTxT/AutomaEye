@@ -14,6 +14,7 @@
         <div class="row">
             <button class="btn primary" onclick="startCam()" id="startBtn">▶ Start Camera</button>
             <button class="btn" onclick="capture()" id="captureBtn" disabled>📷 Capture & Inspect</button>
+            <button class="btn" onclick="toggleLive()" id="liveBtn" disabled>🔴 Live</button>
             <button class="btn danger" onclick="stopCam()" id="stopBtn" disabled>⏹ Stop</button>
         </div>
     </div>
@@ -117,49 +118,92 @@ async function startCam() {
         document.getElementById('snapImg').style.display = 'none';
         document.getElementById('startBtn').disabled = true;
         document.getElementById('captureBtn').disabled = false;
+        document.getElementById('liveBtn').disabled = false;
         document.getElementById('stopBtn').disabled = false;
     } catch (e) { alert('Camera error: ' + e.message); }
 }
 
 function stopCam() {
+    if (live) toggleLive();                       // matikan live dulu
     stream?.getTracks().forEach(t => t.stop());
+    const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
     document.getElementById('cam').style.display = 'none';
     document.getElementById('noSignal').style.display = 'block';
     document.getElementById('startBtn').disabled = false;
     document.getElementById('captureBtn').disabled = true;
+    document.getElementById('liveBtn').disabled = true;
     document.getElementById('stopBtn').disabled = true;
 }
 
-async function capture() {
+let live = false, liveTimer = null, busy = false, revertTimer = null;
+
+// Ambil satu frame dari kamera → dataURL. null bila kamera belum menyuplai frame.
+function grabDataUrl() {
     const video = document.getElementById('cam');
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
     const canvas = document.getElementById('snap');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-
-    // Show snapshot briefly
-    const snapImg = document.getElementById('snapImg');
-    snapImg.src = dataUrl;
-    snapImg.style.display = 'block';
-    video.style.display = 'none';
-
-    try {
-        const result = await window.api.inspect(projectName, dataUrl);
-        renderResult(result, dataUrl);
-    } catch (e) {
-        alert('Inspect error: ' + e.message);
-    }
-
-    // Show video again after a moment (overlay hasil tampil lebih lama)
-    setTimeout(() => {
-        snapImg.style.display = 'none';
-        const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
-        video.style.display = 'block';
-    }, 2500);
+    return canvas.toDataURL('image/jpeg', 0.85);
 }
 
-// Gambar citra hasil + kotak & ANGKA ukuran GD&T di lokasi tiap fitur.
+// Ambil frame + inspeksi + gambar kotak deteksi. Dipakai manual & live.
+async function inspectFrame() {
+    if (busy) return;
+    const dataUrl = grabDataUrl();
+    if (!dataUrl) {
+        if (!live) alert('Kamera belum siap / gagal ambil frame. Coba Stop lalu Start Camera lagi.');
+        return;
+    }
+    busy = true;
+    document.getElementById('cam').style.display = 'none';
+    try {
+        const result = await window.api.inspect(projectName, dataUrl);
+        renderResult(result, dataUrl);              // drawOverlay menampilkan kotak
+    } catch (e) {
+        if (!live) alert('Inspect error: ' + e.message);
+        else console.warn('inspect:', e.message);
+    } finally { busy = false; }
+}
+
+// Tombol Capture & Inspect (sekali) — tampilkan hasil ~3,5 dtk lalu balik live.
+async function capture() {
+    if (revertTimer) clearTimeout(revertTimer);
+    await inspectFrame();
+    if (!live) {
+        revertTimer = setTimeout(() => {
+            const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
+            document.getElementById('cam').style.display = 'block';
+        }, 3500);
+    }
+}
+
+// Mode Live — inspeksi otomatis berulang, kotak deteksi terus diperbarui.
+function toggleLive() {
+    live = !live;
+    const btn = document.getElementById('liveBtn');
+    if (live) {
+        if (revertTimer) clearTimeout(revertTimer);
+        btn.textContent = '⏸ Stop Live';
+        btn.classList.add('primary');
+        document.getElementById('captureBtn').disabled = true;
+        liveTimer = setInterval(inspectFrame, 1500);   // ~0.7 fps (aman untuk CPU)
+        inspectFrame();
+    } else {
+        btn.textContent = '🔴 Live';
+        btn.classList.remove('primary');
+        document.getElementById('captureBtn').disabled = false;
+        clearInterval(liveTimer); liveTimer = null;
+        const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
+        document.getElementById('cam').style.display = 'block';
+    }
+}
+
+const DET_COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'];
+
+// Gambar citra hasil + KOTAK deteksi tiap objek (label kelas + confidence),
+// plus angka ukuran GD&T di bawah kotak bila ada.
 function drawOverlay(result, dataUrl) {
     const cv = document.getElementById('snapView');
     if (!cv) return;
@@ -168,26 +212,42 @@ function drawOverlay(result, dataUrl) {
         cv.width = img.naturalWidth; cv.height = img.naturalHeight;
         const ctx = cv.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        const fs = Math.max(16, Math.round(cv.width / 55));
+        const fs = Math.max(15, Math.round(cv.width / 60));
         ctx.font = `bold ${fs}px sans-serif`; ctx.textBaseline = 'top';
-        ctx.lineWidth = Math.max(2, cv.width / 500);
+        ctx.lineWidth = Math.max(2, Math.round(cv.width / 450));
+        const seen = new Set();
         (result.steps || []).forEach(s => {
             (s.detections || []).forEach(d => {
-                if (!d.gdt) return;
-                const labels = Array.isArray(d.gdt) ? d.gdt : [d.gdt];
-                const anyNG = labels.some(l => !l.ok);
-                // kotak fitur (merah kalau ada yang di luar toleransi)
-                ctx.strokeStyle = anyNG ? '#ef4444' : '#22c55e';
+                if (d.x1 == null) return;
+                // hindari gambar dobel kalau objek sama muncul di 2 step
+                const key = `${Math.round(d.x1)},${Math.round(d.y1)},${Math.round(d.x2)},${Math.round(d.y2)},${d.class_id}`;
+                if (seen.has(key)) return; seen.add(key);
+
+                const gdt = d.gdt ? (Array.isArray(d.gdt) ? d.gdt : [d.gdt]) : null;
+                const baseCol = DET_COLORS[(d.class_id || 0) % DET_COLORS.length];
+                const boxCol = gdt ? (gdt.some(l => !l.ok) ? '#ef4444' : '#22c55e') : baseCol;
+                // kotak deteksi
+                ctx.strokeStyle = boxCol;
                 ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
-                // tumpuk label di atas fitur (satu baris per ukuran)
-                let ly = Math.max(0, d.y1 - (fs + 6) * labels.length - 2);
-                labels.forEach(l => {
-                    const col = l.ok ? '#22c55e' : '#ef4444';
-                    const tw = ctx.measureText(l.text).width;
-                    ctx.fillStyle = col; ctx.fillRect(d.x1, ly, tw + 12, fs + 6);
-                    ctx.fillStyle = '#fff'; ctx.fillText(l.text, d.x1 + 6, ly + 3);
-                    ly += fs + 6;
-                });
+                // label kelas + confidence di atas kotak
+                const cls = d.class_name || ('#' + (d.class_id != null ? d.class_id : '?'));
+                const conf = (typeof d.confidence === 'number') ? ` ${Math.round(d.confidence * 100)}%` : '';
+                const lab = cls + conf;
+                const tw = ctx.measureText(lab).width;
+                const ly = Math.max(0, d.y1 - fs - 6);
+                ctx.fillStyle = baseCol; ctx.fillRect(d.x1, ly, tw + 12, fs + 6);
+                ctx.fillStyle = '#fff'; ctx.fillText(lab, d.x1 + 6, ly + 3);
+                // angka GD&T (kalau ada) di bawah kotak
+                if (gdt) {
+                    let gy = d.y2 + 3;
+                    gdt.forEach(l => {
+                        const col = l.ok ? '#22c55e' : '#ef4444';
+                        const w2 = ctx.measureText(l.text).width;
+                        ctx.fillStyle = col; ctx.fillRect(d.x1, gy, w2 + 12, fs + 6);
+                        ctx.fillStyle = '#fff'; ctx.fillText(l.text, d.x1 + 6, gy + 3);
+                        gy += fs + 6;
+                    });
+                }
             });
         });
         document.getElementById('snapImg').style.display = 'none';
@@ -226,8 +286,16 @@ function renderResult(result, dataUrl) {
         anchor.parentNode.insertBefore(slEl, anchor.nextSibling);
     }
     if (sl && sl.collected) {
-        slEl.innerHTML = `🧠 Self-learning: hard sample terkumpul untuk <strong>${esc(sl.modelName)}</strong> ` +
+        let msg = `🧠 Self-learning: hard sample terkumpul untuk <strong>${esc(sl.modelName)}</strong> ` +
             `(pending ${sl.count})` + (sl.needsRetrain ? ' — <strong style="color:#f59e0b">ambang retrain tercapai, siap retraining</strong>' : '');
+        const ai = sl.aiSuggestion;
+        if (ai && ai.text) {
+            const col = ai.verdict === 'NG' ? '#ef4444' : (ai.verdict === 'OK' ? '#22c55e' : '#64748b');
+            msg += `<br>🤖 Saran AI (VLM, tinjau): <strong style="color:${col}">${esc(ai.verdict || '—')}</strong> — ${esc(ai.text)}`;
+        } else if (ai && ai.error) {
+            msg += `<br><span style="color:#94a3b8">🤖 AI triage gagal: ${esc(ai.error)}</span>`;
+        }
+        slEl.innerHTML = msg;
     } else if (sl && sl.reason === 'disabled') {
         slEl.textContent = '';
     }

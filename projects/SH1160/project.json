@@ -2,7 +2,7 @@
   "name": "SH1160",
   "description": "AI detection untuk Socket Holder 1160",
   "createdAt": "2026-07-11T03:07:48.055Z",
-  "updatedAt": "2026-07-12T15:55:11.857Z",
+  "updatedAt": "2026-07-13T02:10:37.764Z",
   "models": [
     {
       "name": "Object Detector",
@@ -73,20 +73,20 @@
         "label": "Kamera / Webcam",
         "config": {
           "source": "kamera",
-          "minKB": 5
+          "minKB": 0
         },
         "continueOn": "always",
         "stepIndex": 1
       },
       {
-        "category": "Positioning",
         "modelName": "Object Detector",
+        "category": "Inspection",
         "continueOn": "always",
         "stepIndex": 2
       },
       {
+        "modelName": "Socket Measurement",
         "category": "Inspection",
-        "modelName": "Object Detector",
         "continueOn": "always",
         "stepIndex": 3
       },
@@ -114,6 +114,6 @@
         "stepIndex": 5
       }
     ],
-    "onFirstNG": "continue"
+    "onFirstNG": "stop_and_report"
   }
 }
