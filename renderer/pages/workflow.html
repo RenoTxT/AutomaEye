@@ -115,6 +115,8 @@ function renderProps() {
         head = `<h3>Step [${selectedIdx + 1}] — ${esc(s.modelName)}</h3>
             <p class="muted">Type: <strong>${m ? esc(m.type) : '?'}</strong> · Status: ${trained}<br>
             ${s.category === 'Positioning' ? 'Peran: mengunci lokasi part (bukan menilai).' : 'Peran: menilai OK/NG lewat add-on.'}</p>`;
+        const pass = (s.config && s.config.passOnNoDetect) ? 'checked' : '';
+        configHtml = `<label style="display:block;margin-bottom:6px"><input type="checkbox" ${pass} onchange="updateStepConfig('passOnNoDetect', this.checked)"> Anggap <strong>OK</strong> bila tidak ada objek terdeteksi (lanjut ke step berikutnya)</label>`;
     } else {
         head = `<h3>Step [${selectedIdx + 1}] — ${esc(s.label || s.tool)}</h3>
             <p class="muted">Tool ${esc(s.category)}.</p>`;

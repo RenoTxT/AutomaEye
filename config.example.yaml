@@ -21,7 +21,8 @@ model:
   imgsz: 640
 nvidia:
   api_key: ''
-  model: meta/llama-3.3-70b-instruct
+  base_url: https://api.cosmoshub.tech/v1
+  model: qwen-3.7-max
 self_learning:
   enabled: false
   api_key: ''
@@ -29,7 +30,7 @@ self_learning:
   uncertainty_low: 0.3
   uncertainty_high: 0.7
   ai_triage: false
-  vision_model: meta/llama-3.2-11b-vision-instruct
+  vision_model: qwen-3.7-max
 auto_calibration:
   enabled: false
   api_key: ''

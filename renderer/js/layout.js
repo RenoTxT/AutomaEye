@@ -41,20 +41,12 @@
                 </div>
             </div>
             <div class="menu-item" onclick="window.api.goTo('settings.html')">Setting</div>
-            <div class="menu-item" style="position:relative" onclick="toggleMenu(event,'helpMenu')">Help &#9662;
-                <div id="helpMenu" class="util-menu" style="display:none">
-                    <div class="util-opt" onclick="showAbout()">&#8505;&#65039; Tentang AutomaEyes</div>
-                    <div class="util-opt" onclick="window.api.goTo('projects.html')">&#127968; Home</div>
-                </div>
-            </div>
         </div>
     `;
 
     // ==== TOOLBAR ====
     const toolbarHTML = `
         <div class="toolbar">
-            <button class="toolbar-btn" title="Home" onclick="window.api.goTo('projects.html')">🏠</button>
-            <div class="toolbar-separator"></div>
             <button class="toolbar-btn" title="Save & Upload ke GitHub" onclick="syncSaveToCloud(event)">💾</button>
             <button class="toolbar-btn" title="Load versi terbaru dari GitHub" onclick="syncLoadFromCloud(event)">📂</button>
             <div class="toolbar-separator"></div>

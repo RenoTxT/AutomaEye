@@ -93,7 +93,7 @@
             <div class="card">
                 <div class="section-title">Data Augmentation</div>
                 <div style="padding:12px">
-                    <p class="muted">Generate variasi gambar per opsi (tidak dicampur). Contoh: centang Rotate + Blur, multiplier=2, dari 1 gambar → 4 output baru (2 rotate, 2 blur), gambar asli tetap ada. <strong>Label ikut ditransform otomatis.</strong> Hanya gambar di <em>train</em> yang diaugmentasi.</p>
+                    <p class="muted">Generate variasi gambar per opsi (tidak dicampur). Contoh: centang Rotate + Blur, multiplier=2, dari 1 gambar → 4 output baru (2 rotate, 2 blur), gambar asli tetap ada. <strong>Label ikut ditransform otomatis.</strong> Secara default hanya <em>train</em> yang diaugmentasi; pilih split di bawah bila perlu juga Val/Test.</p>
 
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                         <p class="muted" style="font-size:11px; margin:0">Preview dari <strong id="sampleName">—</strong></p>
@@ -167,7 +167,15 @@
                     <hr style="margin: 12px 0; border: none; border-top: 1px solid var(--border);">
                     <label>Multiplier (varian per opsi per gambar) <input type="number" id="augMult" value="2" min="1" max="5" style="max-width:120px"></label>
 
-                    <button class="btn primary" onclick="generateAug()" id="genBtn">Generate</button>
+                    <div style="margin-top:10px">
+                        <div style="font-size:12px; font-weight:600; margin-bottom:4px">Split yang di-augment (output ke folder masing-masing)</div>
+                        <label style="margin-right:14px"><input type="checkbox" id="augSplitTrain" checked> Train</label>
+                        <label style="margin-right:14px"><input type="checkbox" id="augSplitVal"> Val</label>
+                        <label><input type="checkbox" id="augSplitTest"> Test</label>
+                        <p class="muted" style="font-size:11px; margin:4px 0 0">Default: hanya <em>train</em> (praktik ML standar). Centang Val/Test hanya bila diminta (mis. syarat pembimbing) — tiap split di-augment ke foldernya sendiri, tidak dicampur.</p>
+                    </div>
+
+                    <button class="btn primary" onclick="generateAug()" id="genBtn" style="margin-top:10px">Generate</button>
                     <div class="progress-bar" id="augBar" style="display:none"><div class="progress-fill" id="augFill" style="width:0"></div></div>
                     <p class="muted" id="augStatus" style="margin-top:8px"></p>
                 </div>
@@ -612,6 +620,15 @@ async function generateAug() {
         return;
     }
 
+    const splits = [];
+    if (document.getElementById('augSplitTrain').checked) splits.push('train');
+    if (document.getElementById('augSplitVal').checked) splits.push('val');
+    if (document.getElementById('augSplitTest').checked) splits.push('test');
+    if (!splits.length) {
+        document.getElementById('augStatus').textContent = '⚠️ Pilih minimal 1 split (Train/Val/Test)';
+        return;
+    }
+
     const bar = document.getElementById('augBar');
     const fill = document.getElementById('augFill');
     bar.style.display = 'block';
@@ -630,6 +647,7 @@ async function generateAug() {
             noise: noise,
             noiseSigma: noise ? parseFloat(document.getElementById('noiseBox').value) : 0,
             multiplier: parseInt(document.getElementById('augMult').value) || 2,
+            splits,
         });
         fill.style.width = '100%';
         document.getElementById('augStatus').textContent =
@@ -1301,18 +1319,34 @@ function openGdtCalib() {
     document.body.appendChild(overlay);
 
     const canvas = document.getElementById('calibCanvas');
-    const ctx = canvas.getContext('2d');
     const video = document.createElement('video');
     video.autoplay = true; video.muted = true; video.playsInline = true;
+    // Lampirkan ke DOM (tersembunyi) supaya frame/metadata kamera lebih andal muncul.
+    video.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(video);
 
-    _calib = { overlay, canvas, video, stream: null, raf: 0, p0: null, p1: null, dragging: false, pxLen: 0 };
+    _calib = { overlay, canvas, video, stream: null, raf: 0, blackTimer: 0, p0: null, p1: null, dragging: false, pxLen: 0 };
 
     navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } })
-        .then(stream => {
+        .then(async stream => {
+            if (!_calib) { stream.getTracks().forEach(t => t.stop()); return; }
             _calib.stream = stream; video.srcObject = stream;
-            video.onloadedmetadata = () => { video.play(); loopCalib(); };
+            try { await video.play(); } catch (_) { }
+            loopCalib();                       // mulai loop langsung (guard videoWidth di dalam)
+            // Deteksi layar hitam: kalau 3 dtk tak ada frame → kamera sibuk/dipakai app lain.
+            _calib.blackTimer = setTimeout(() => {
+                if (_calib && (!video.videoWidth || video.readyState < 2)) {
+                    alert('Kamera terbuka tapi tidak mengirim gambar (layar hitam).\n\n' +
+                        'Biasanya kamera sedang dipakai aplikasi lain (Discord, WhatsApp, Brave) ' +
+                        'atau halaman Run masih memegang kamera. Tutup dulu aplikasi itu / Stop kamera di Run, lalu coba lagi.');
+                }
+            }, 3000);
         })
-        .catch(e => { alert('Tidak bisa akses kamera: ' + e.message); closeGdtCalib(); });
+        .catch(e => {
+            alert('Tidak bisa akses kamera: ' + e.message +
+                '\n\nPastikan tidak ada aplikasi lain (Discord/WhatsApp/Brave) yang sedang memakai kamera.');
+            closeGdtCalib();
+        });
 
     // Interaksi ukur (koordinat display → dipetakan ke piksel INTRINSIK video).
     const toDisp = ev => {
@@ -1379,7 +1413,9 @@ function loopCalib() {
 function closeGdtCalib() {
     if (!_calib) return;
     if (_calib.raf) cancelAnimationFrame(_calib.raf);
+    if (_calib.blackTimer) clearTimeout(_calib.blackTimer);
     if (_calib.stream) _calib.stream.getTracks().forEach(t => t.stop());
+    if (_calib.video && _calib.video.parentNode) _calib.video.remove();
     if (_calib.overlay && _calib.overlay.parentNode) _calib.overlay.remove();
     _calib = null;
 }

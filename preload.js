@@ -64,7 +64,7 @@ contextBridge.exposeInMainWorld('api', {
     saveWorkflow: (project, steps, onFirstNG) => ipcRenderer.invoke('workflow:save', { project, steps, onFirstNG }),
 
     // Run
-    inspect: (project, imageDataUrl) => ipcRenderer.invoke('run:inspect', { project, imageDataUrl }),
+    inspect: (project, imageDataUrl, opts) => ipcRenderer.invoke('run:inspect', { project, imageDataUrl, opts }),
 
     // Auto-Calibration
     runCalibration: (project, model) => ipcRenderer.invoke('calibration:run', { project, model }),

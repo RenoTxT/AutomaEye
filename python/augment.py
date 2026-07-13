@@ -149,16 +149,12 @@ def main():
     ap.add_argument("--exposure-alpha", type=float, default=1.2)
     ap.add_argument("--noise", action="store_true")
     ap.add_argument("--noise-sigma", type=float, default=8.0)
+    ap.add_argument("--splits", default="train",
+                    help="split yang di-augment, pisah koma. mis: train  atau  train,val,test")
     args = ap.parse_args()
 
     base = Path(args.dir)
-    src_dir = base / "images" / "train"
-    lbl_dir = base / "labels" / "train"
-    if not src_dir.exists():
-        print(f"[X] {src_dir} not found", flush=True)
-        print("generated: 0", flush=True)
-        return
-    lbl_dir_exists = lbl_dir.exists()
+    splits = [s.strip() for s in (args.splits or "train").split(",") if s.strip()]
 
     enabled = []
     if args.rotate:
@@ -178,20 +174,32 @@ def main():
         print("[!] Tidak ada augmentasi enabled", flush=True)
         return
 
-    sources = []
+    # Kumpulkan sumber PER SPLIT. Output tiap split ditulis kembali ke foldernya
+    # sendiri (train->train, val->val, test->test) → tidak ada percampuran antar-split.
+    per_split = []          # (split, src_dir, lbl_dir, [(img, lbl), ...])
+    total = 0
     skipped_no_label = 0
-    for img_path in sorted(src_dir.iterdir()):
-        if ".aug" in img_path.name:
+    for split in splits:
+        src_dir = base / "images" / split
+        lbl_dir = base / "labels" / split
+        if not src_dir.exists():
+            print(f"[i] lewati split '{split}' — {src_dir} tidak ada", flush=True)
             continue
-        if img_path.suffix.lower() not in (".jpg", ".jpeg", ".png"):
-            continue
-        lbl_path = lbl_dir / (img_path.stem + ".txt")
-        if not (lbl_dir_exists and lbl_path.exists()):
-            skipped_no_label += 1
-            continue
-        sources.append((img_path, lbl_path))
+        lbl_dir_exists = lbl_dir.exists()
+        sources = []
+        for img_path in sorted(src_dir.iterdir()):
+            if ".aug" in img_path.name:
+                continue
+            if img_path.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+                continue
+            lbl_path = lbl_dir / (img_path.stem + ".txt")
+            if not (lbl_dir_exists and lbl_path.exists()):
+                skipped_no_label += 1
+                continue
+            sources.append((img_path, lbl_path))
+        per_split.append((split, src_dir, lbl_dir, sources))
+        total += len(sources) * len(enabled) * args.multiplier
 
-    total = len(sources) * len(enabled) * args.multiplier
     if total == 0:
         print("generated: 0", flush=True)
         print(f"[!] Tidak ada gambar ber-label untuk di-augment "
@@ -202,55 +210,56 @@ def main():
     done = 0
     print(f"PROGRESS 0/{total}", flush=True)
 
-    for img_path, lbl_path in sources:
-        img = cv2.imread(str(img_path))
-        if img is None:
-            done += len(enabled) * args.multiplier
-            print(f"PROGRESS {done}/{total}", flush=True)
-            continue
-        h, w = img.shape[:2]
-        items = read_label(lbl_path)
-        stem = img_path.stem
+    for split, src_dir, lbl_dir, sources in per_split:
+        for img_path, lbl_path in sources:
+            img = cv2.imread(str(img_path))
+            if img is None:
+                done += len(enabled) * args.multiplier
+                print(f"PROGRESS {done}/{total}", flush=True)
+                continue
+            h, w = img.shape[:2]
+            items = read_label(lbl_path)
+            stem = img_path.stem
 
-        for aug_name, kind in enabled:
-            for i in range(args.multiplier):
-                try:
-                    if kind == "rotate":
-                        angle = random.uniform(-args.rotate_max, args.rotate_max)
-                        M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-                        out_img = cv2.warpAffine(img, M, (w, h))
-                        out_items = [r for r in
-                                     (rotate_item(c, v, p, M, w, h) for (c, v, p) in items)
-                                     if r]
-                    elif kind == "fliph":
-                        out_img = apply_flip_h(img)
-                        out_items = [flip_item(c, v, p, 'h') for (c, v, p) in items]
-                    elif kind == "flipv":
-                        out_img = apply_flip_v(img)
-                        out_items = [flip_item(c, v, p, 'v') for (c, v, p) in items]
-                    elif kind == "blur":
-                        out_img = apply_blur(img, args.blur_sigma)
-                        out_items = list(items)
-                    elif kind == "exposure":
-                        out_img = apply_exposure(img, args.exposure_alpha)
-                        out_items = list(items)
-                    elif kind == "noise":
-                        out_img = apply_noise(img, args.noise_sigma)
-                        out_items = list(items)
-                    else:
-                        continue
+            for aug_name, kind in enabled:
+                for i in range(args.multiplier):
+                    try:
+                        if kind == "rotate":
+                            angle = random.uniform(-args.rotate_max, args.rotate_max)
+                            M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+                            out_img = cv2.warpAffine(img, M, (w, h))
+                            out_items = [r for r in
+                                         (rotate_item(c, v, p, M, w, h) for (c, v, p) in items)
+                                         if r]
+                        elif kind == "fliph":
+                            out_img = apply_flip_h(img)
+                            out_items = [flip_item(c, v, p, 'h') for (c, v, p) in items]
+                        elif kind == "flipv":
+                            out_img = apply_flip_v(img)
+                            out_items = [flip_item(c, v, p, 'v') for (c, v, p) in items]
+                        elif kind == "blur":
+                            out_img = apply_blur(img, args.blur_sigma)
+                            out_items = list(items)
+                        elif kind == "exposure":
+                            out_img = apply_exposure(img, args.exposure_alpha)
+                            out_items = list(items)
+                        elif kind == "noise":
+                            out_img = apply_noise(img, args.noise_sigma)
+                            out_items = list(items)
+                        else:
+                            continue
 
-                    out_img_path = src_dir / f"{stem}.{aug_name}.aug{i}.jpg"
-                    out_lbl_path = lbl_dir / f"{stem}.{aug_name}.aug{i}.txt"
-                    cv2.imwrite(str(out_img_path), out_img)
-                    write_label(out_lbl_path, out_items)
-                    generated += 1
-                except Exception as e:
-                    print(f"[!] {aug_name} on {img_path.name}: {e}", flush=True)
-                finally:
-                    done += 1
-                    if done % 10 == 0 or done == total:
-                        print(f"PROGRESS {done}/{total}", flush=True)
+                        out_img_path = src_dir / f"{stem}.{aug_name}.aug{i}.jpg"
+                        out_lbl_path = lbl_dir / f"{stem}.{aug_name}.aug{i}.txt"
+                        cv2.imwrite(str(out_img_path), out_img)
+                        write_label(out_lbl_path, out_items)
+                        generated += 1
+                    except Exception as e:
+                        print(f"[!] {aug_name} on {img_path.name}: {e}", flush=True)
+                    finally:
+                        done += 1
+                        if done % 10 == 0 or done == total:
+                            print(f"PROGRESS {done}/{total}", flush=True)
 
     print(f"generated: {generated}", flush=True)
     if skipped_no_label:

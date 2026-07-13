@@ -44,9 +44,10 @@
     </div>
 
     <div class="card">
-        <div class="section-title">NVIDIA NIM (AI Assistant)</div>
+        <div class="section-title">AI Assistant (OpenAI-compatible)</div>
         <div style="padding:12px">
-            <p class="muted">API key gratis dari <a href="https://build.nvidia.com" target="_blank">build.nvidia.com</a> — login Google/GitHub, klik Get API Key.</p>
+            <p class="muted">Provider apa pun yang OpenAI-compatible. Default: <a href="https://build.nvidia.com" target="_blank">NVIDIA NIM</a>. Untuk provider lain, ganti Base URL + model.</p>
+            <label>Base URL <input type="text" id="nvidiaBaseUrl" placeholder="https://api.cosmoshub.tech/v1" style="width:440px"></label>
             <label>API key <input type="password" id="nvidiaKey"></label>
             <label>Default model <input type="text" id="nvidiaModel"></label>
         </div>
@@ -62,9 +63,9 @@
                 <label>Zona ragu atas <input type="number" id="uHigh" min="0" max="1" step="0.05" style="width:80px"></label>
             </div>
             <label>Self-Learning API key (opsional) <input type="password" id="selfKey"></label>
-            <label style="display:block;margin-top:6px"><input type="checkbox" id="aiTriage"> Aktifkan AI Triage (VLM NVIDIA) — beri saran OK/NG pada hard sample untuk ditinjau manusia</label>
-            <label>Model VLM <input type="text" id="visionModel" placeholder="meta/llama-3.2-11b-vision-instruct" style="width:330px"></label>
-            <p class="muted" style="font-size:11px">Memakai NVIDIA API key di atas. Saran ini untuk <strong>ditinjau</strong>, bukan label otomatis. Gambar besar (&gt;~180 KB) bisa gagal — kecilkan resolusi kamera bila perlu.</p>
+            <label style="display:block;margin-top:6px"><input type="checkbox" id="aiTriage"> Aktifkan AI Triage (VLM) — beri saran OK/NG pada hard sample untuk ditinjau manusia</label>
+            <label>Model VLM <input type="text" id="visionModel" placeholder="qwen-3.7-max" style="width:330px"></label>
+            <p class="muted" style="font-size:11px">Memakai API key di atas. Butuh model multimodal (mis. qwen-3.7-max / gemini-3.5-flash). Saran ini untuk <strong>ditinjau</strong>, bukan label otomatis.</p>
             <hr>
             <label><input type="checkbox" id="calibEnabled"> Aktifkan Auto-Calibration (sweep confidence threshold via F1 pada val set)</label>
             <label>Auto-Calibration API key (opsional) <input type="password" id="calibKey"></label>
@@ -104,15 +105,16 @@ async function load() {
     document.getElementById('okSignal').value = cfg.arduino.ok_signal || '0\n';
     document.getElementById('ngSignal').value = cfg.arduino.ng_signal || '1\n';
     document.getElementById('signalOnOk').checked = !!cfg.arduino.signal_on_ok;
+    document.getElementById('nvidiaBaseUrl').value = cfg.nvidia.base_url || 'https://api.cosmoshub.tech/v1';
     document.getElementById('nvidiaKey').value = cfg.nvidia.api_key || '';
-    document.getElementById('nvidiaModel').value = cfg.nvidia.model || 'meta/llama-3.3-70b-instruct';
+    document.getElementById('nvidiaModel').value = cfg.nvidia.model || 'qwen-3.7-max';
     document.getElementById('selfKey').value = cfg.self_learning.api_key || '';
     document.getElementById('selfEnabled').checked = !!cfg.self_learning.enabled;
     document.getElementById('retrainN').value = cfg.self_learning.retrain_every_n || 100;
     document.getElementById('uLow').value = cfg.self_learning.uncertainty_low ?? 0.3;
     document.getElementById('uHigh').value = cfg.self_learning.uncertainty_high ?? 0.7;
     document.getElementById('aiTriage').checked = !!cfg.self_learning.ai_triage;
-    document.getElementById('visionModel').value = cfg.self_learning.vision_model || 'meta/llama-3.2-11b-vision-instruct';
+    document.getElementById('visionModel').value = cfg.self_learning.vision_model || 'qwen-3.7-max';
     document.getElementById('calibKey').value = cfg.auto_calibration.api_key || '';
     document.getElementById('calibEnabled').checked = !!cfg.auto_calibration.enabled;
     document.getElementById('annCmd').value = cfg.annotation.command || '';
@@ -138,6 +140,7 @@ async function save() {
         },
         nvidia: {
             ...cfg.nvidia,
+            base_url: document.getElementById('nvidiaBaseUrl').value || 'https://integrate.api.nvidia.com/v1',
             api_key: document.getElementById('nvidiaKey').value,
             model: document.getElementById('nvidiaModel').value,
         },
@@ -149,7 +152,7 @@ async function save() {
             uncertainty_low: parseFloat(document.getElementById('uLow').value),
             uncertainty_high: parseFloat(document.getElementById('uHigh').value),
             ai_triage: document.getElementById('aiTriage').checked,
-            vision_model: document.getElementById('visionModel').value || 'meta/llama-3.2-11b-vision-instruct',
+            vision_model: document.getElementById('visionModel').value || 'qwen-3.7-max',
         },
         auto_calibration: {
             ...cfg.auto_calibration,

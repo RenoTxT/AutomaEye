@@ -1,0 +1,131 @@
+{
+  "split": "test",
+  "savedDir": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240",
+  "overall": {
+    "map50": 0.995,
+    "map5095": 0.9458333333333334,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0
+  },
+  "perClass": [
+    {
+      "name": "object",
+      "precision": 1.0,
+      "recall": 1.0,
+      "map50": 0.995,
+      "map5095": 0.9458333333333334
+    }
+  ],
+  "plots": {
+    "confusionMatrix": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\val\\confusion_matrix.png",
+    "confusionMatrixNorm": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\val\\confusion_matrix_normalized.png",
+    "prCurve": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\val\\BoxPR_curve.png",
+    "f1Curve": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\val\\BoxF1_curve.png",
+    "pCurve": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\val\\BoxP_curve.png",
+    "rCurve": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\val\\BoxPR_curve.png"
+  },
+  "predictions": [
+    {
+      "name": "WIN_20260710_23_30_47_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260710_23_30_47_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9366173148155212
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260710_23_31_04_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260710_23_31_04_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9380776286125183
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260710_23_34_26_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260710_23_34_26_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9385903477668762
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260710_23_39_00_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260710_23_39_00_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9337136745452881
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260711_08_27_26_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260711_08_27_26_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9376771450042725
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260711_08_28_07_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260711_08_28_07_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9410901069641113
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260711_08_34_24_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260711_08_34_24_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9321979880332947
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260711_08_37_49_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260711_08_37_49_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9292892813682556
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260711_08_40_42_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260711_08_40_42_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9377840757369995
+        }
+      ]
+    },
+    {
+      "name": "WIN_20260711_09_22_09_Pro.jpg",
+      "image": "C:\\Users\\Paul\\Documents\\TA 36\\App\\AutomaEye\\projects\\SH1160\\models\\Object Detector\\eval\\20260713-121240\\pred\\WIN_20260711_09_22_09_Pro.jpg",
+      "detections": [
+        {
+          "name": "object",
+          "conf": 0.9091883301734924
+        }
+      ]
+    }
+  ],
+  "generatedAt": "20260713-121240"
+}

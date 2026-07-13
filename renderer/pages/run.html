@@ -28,16 +28,25 @@
             <div class="image-viewer">
                 <video id="cam" autoplay muted playsinline style="display:none"></video>
                 <img id="snapImg" class="snapshot" style="display:none" />
-                <canvas id="snapView" class="snapshot" style="display:none; max-width:100%; height:auto"></canvas>
+                <canvas id="snapView" class="snapshot" style="display:none"></canvas>
+                <canvas id="liveOverlay" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); max-width:100%; max-height:100%; pointer-events:none; display:none"></canvas>
                 <canvas id="snap" style="display:none"></canvas>
                 <div id="noSignal" style="color:#666">📷 Klik Start Camera</div>
             </div>
-            <div class="filmstrip" id="filmstrip"></div>
         </div>
 
         <!-- RIGHT: Properties / Results -->
         <div class="results-panel">
             <div class="results-section">
+                <h4>Live Settings</h4>
+                <label style="display:block;font-size:12px;margin-bottom:4px">Interval (ms)
+                    <input type="number" id="liveIntervalMs" value="120" min="50" step="10" style="width:90px" onchange="restartLive()"></label>
+                <label style="display:block;font-size:12px;margin-bottom:4px">Confidence
+                    <input type="number" id="liveConf" value="0.5" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
+                <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="labelToggle" checked> Label model+addon</label>
+                <p class="muted" id="fpsInfo" style="font-size:11px;margin:2px 0 0">FPS: — · infer — ms</p>
+            </div>
+            <div class="results-section" style="flex:1 1 0; min-height:120px; overflow-y:auto">
                 <h4>Step Results</h4>
                 <table class="table">
                     <thead><tr><th>#</th><th>Model</th><th>Verdict</th><th>Conf</th></tr></thead>
@@ -127,6 +136,7 @@ function stopCam() {
     if (live) toggleLive();                       // matikan live dulu
     stream?.getTracks().forEach(t => t.stop());
     const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
+    const lo = document.getElementById('liveOverlay'); if (lo) lo.style.display = 'none';
     document.getElementById('cam').style.display = 'none';
     document.getElementById('noSignal').style.display = 'block';
     document.getElementById('startBtn').disabled = false;
@@ -136,6 +146,22 @@ function stopCam() {
 }
 
 let live = false, liveTimer = null, busy = false, revertTimer = null;
+
+let fpsSamples = [];
+function liveMs() { return Math.max(50, parseInt(document.getElementById('liveIntervalMs').value) || 120); }
+function restartLive() {
+    if (!live) return;
+    clearInterval(liveTimer);
+    liveTimer = setInterval(inspectFrame, liveMs());
+}
+function updateFps(cycleMs, result) {
+    fpsSamples.push(cycleMs); if (fpsSamples.length > 8) fpsSamples.shift();
+    const avg = fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length;
+    const fps = avg > 0 ? 1000 / avg : 0;
+    const infer = (result && result.totalMS != null) ? Math.round(result.totalMS) : Math.round(cycleMs);
+    const el = document.getElementById('fpsInfo');
+    if (el) el.textContent = `FPS: ${fps.toFixed(1)} · infer ${infer} ms`;
+}
 
 // Ambil satu frame dari kamera → dataURL. null bila kamera belum menyuplai frame.
 function grabDataUrl() {
@@ -149,7 +175,7 @@ function grabDataUrl() {
 }
 
 // Ambil frame + inspeksi + gambar kotak deteksi. Dipakai manual & live.
-async function inspectFrame() {
+async function inspectFrame(forceFull) {
     if (busy) return;
     const dataUrl = grabDataUrl();
     if (!dataUrl) {
@@ -157,9 +183,14 @@ async function inspectFrame() {
         return;
     }
     busy = true;
-    document.getElementById('cam').style.display = 'none';
+    // Live: video TETAP jalan (kotak digambar di overlay transparan). Manual: drawOverlay yang sembunyikan video.
+    const conf = parseFloat(document.getElementById('liveConf').value);
+    const t0 = performance.now();
     try {
-        const result = await window.api.inspect(projectName, dataUrl);
+        // Semua model (termasuk Socket Measurement) jalan saat Live maupun Capture.
+        // (Presence gate tetap aktif: kalau part tidak ada, model berat otomatis dilewati.)
+        const result = await window.api.inspect(projectName, dataUrl, { confidence: isNaN(conf) ? undefined : conf });
+        updateFps(performance.now() - t0, result);
         renderResult(result, dataUrl);              // drawOverlay menampilkan kotak
     } catch (e) {
         if (!live) alert('Inspect error: ' + e.message);
@@ -167,16 +198,15 @@ async function inspectFrame() {
     } finally { busy = false; }
 }
 
-// Tombol Capture & Inspect (sekali) — tampilkan hasil ~3,5 dtk lalu balik live.
+// Tombol Capture & Inspect — inspeksi PENUH (Socket Measurement + ukuran GD&T).
+// Bisa ditekan kapan saja: kalau Live sedang jalan, dihentikan dulu supaya hasil ukur tidak tertimpa.
 async function capture() {
     if (revertTimer) clearTimeout(revertTimer);
-    await inspectFrame();
-    if (!live) {
-        revertTimer = setTimeout(() => {
-            const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
-            document.getElementById('cam').style.display = 'block';
-        }, 3500);
-    }
+    if (live) toggleLive();                       // stop Live agar loop presence tidak menimpa hasil ukur
+    // tunggu inferensi live yang mungkin masih berjalan (guard maks ~30 dtk)
+    let guard = 0;
+    while (busy && guard++ < 300) await new Promise(r => setTimeout(r, 100));
+    await inspectFrame(true);                      // full: semua model → ukuran keluar (gambar dibekukan)
 }
 
 // Mode Live — inspeksi otomatis berulang, kotak deteksi terus diperbarui.
@@ -187,14 +217,18 @@ function toggleLive() {
         if (revertTimer) clearTimeout(revertTimer);
         btn.textContent = '⏸ Stop Live';
         btn.classList.add('primary');
-        document.getElementById('captureBtn').disabled = true;
-        liveTimer = setInterval(inspectFrame, 1500);   // ~0.7 fps (aman untuk CPU)
+        document.getElementById('captureBtn').disabled = false;   // tetap bisa Capture penuh saat Live
+        // video tetap tampil; snapView (frame beku) disembunyikan supaya tidak menutupi video live
+        const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
+        document.getElementById('cam').style.display = 'block';
+        liveTimer = setInterval(inspectFrame, liveMs());
         inspectFrame();
     } else {
         btn.textContent = '🔴 Live';
         btn.classList.remove('primary');
         document.getElementById('captureBtn').disabled = false;
         clearInterval(liveTimer); liveTimer = null;
+        const lo = document.getElementById('liveOverlay'); if (lo) lo.style.display = 'none';
         const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
         document.getElementById('cam').style.display = 'block';
     }
@@ -202,8 +236,96 @@ function toggleLive() {
 
 const DET_COLORS = ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'];
 
-// Gambar citra hasil + KOTAK deteksi tiap objek (label kelas + confidence),
-// plus angka ukuran GD&T di bawah kotak bila ada.
+// Kepala panah kecil di titik (x,y) mengarah ke (dx,dy).
+function arrowHead(ctx, x, y, dx, dy, size) {
+    const ang = Math.atan2(dy, dx);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - size * Math.cos(ang - 0.5), y - size * Math.sin(ang - 0.5));
+    ctx.lineTo(x - size * Math.cos(ang + 0.5), y - size * Math.sin(ang + 0.5));
+    ctx.closePath(); ctx.fill();
+}
+// Label mm dengan latar warna di titik tengah panah.
+function dimLabel(ctx, mx, my, text, col, fs) {
+    const w = ctx.measureText(text).width;
+    ctx.fillStyle = col; ctx.fillRect(mx - w / 2 - 3, my - (fs + 4) / 2, w + 6, fs + 4);
+    ctx.fillStyle = '#fff'; ctx.fillText(text, mx - w / 2, my - (fs + 4) / 2 + 2);
+}
+// Panah dimensi HORIZONTAL dari x0..x1 pada tinggi y.
+function dimArrowH(ctx, x0, x1, y, text, col, fs) {
+    if (x1 - x0 < 8) return;
+    const s = Math.max(6, fs * 0.6);
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+    arrowHead(ctx, x0, y, -1, 0, s); arrowHead(ctx, x1, y, 1, 0, s);
+    dimLabel(ctx, (x0 + x1) / 2, y, text, col, fs);
+}
+// Panah dimensi VERTIKAL dari y0..y1 pada posisi x.
+function dimArrowV(ctx, x, y0, y1, text, col, fs) {
+    if (y1 - y0 < 8) return;
+    const s = Math.max(6, fs * 0.6);
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+    arrowHead(ctx, x, y0, 0, -1, s); arrowHead(ctx, x, y1, 0, 1, s);
+    dimLabel(ctx, x, (y0 + y1) / 2, text, col, fs);
+}
+
+// Gambar KOTAK deteksi tiap objek (label kelas + confidence),
+// plus angka ukuran GD&T di atas kotak bila ada. Dipakai untuk snapView (beku) & liveOverlay (transparan).
+function drawBoxes(ctx, result, cvWidth) {
+    const fs = Math.max(12, Math.round(cvWidth / 85));
+    ctx.font = `bold ${fs}px sans-serif`; ctx.textBaseline = 'top';
+    ctx.lineWidth = Math.max(2, Math.round(cvWidth / 500));
+    const seen = new Set();
+    const rich = document.getElementById('labelToggle') ? document.getElementById('labelToggle').checked : true;
+    (result.steps || []).forEach(s => {
+        const addon = (s.checks && s.checks[0]) ? s.checks[0].addon : null;
+        (s.detections || []).forEach(d => {
+            if (d.x1 == null) return;
+            const key = `${Math.round(d.x1)},${Math.round(d.y1)},${Math.round(d.x2)},${Math.round(d.y2)},${d.class_id}`;
+            if (seen.has(key)) return; seen.add(key);
+
+            const gdt = d.gdt ? (Array.isArray(d.gdt) ? d.gdt : [d.gdt]) : null;
+            const baseCol = DET_COLORS[(d.class_id || 0) % DET_COLORS.length];
+            // merah kalau ada yang gagal (ok===false); hijau kalau ada yang lulus; biru = ukuran mentah (ok===null)
+            const boxCol = gdt
+                ? (gdt.some(l => l.ok === false) ? '#ef4444' : gdt.some(l => l.ok === true) ? '#22c55e' : '#3b82f6')
+                : baseCol;
+            ctx.strokeStyle = boxCol;
+            ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+            const cls = d.class_name || ('#' + (d.class_id != null ? d.class_id : '?'));
+            if (gdt) {
+                // Gambar GARIS PANAH DIMENSI di sisi yang diukur (vertikal=tinggi, horizontal=lebar/diameter).
+                let stackTop = 0;   // untuk label yang tak punya orientasi (fallback)
+                gdt.forEach(l => {
+                    const col = l.ok === false ? '#ef4444' : l.ok === true ? '#22c55e' : '#3b82f6';
+                    if (l.kind === 'long') {
+                        dimArrowV(ctx, d.x1 + Math.max(6, fs * 0.5), d.y1 + 3, d.y2 - 3, l.text, col, fs);
+                    } else if (l.kind === 'short') {
+                        dimArrowH(ctx, d.x1 + 3, d.x2 - 3, d.y2 - Math.max(6, fs * 0.5), l.text, col, fs);
+                    } else if (l.kind === 'dia') {
+                        dimArrowH(ctx, d.x1 + 3, d.x2 - 3, (d.y1 + d.y2) / 2, l.text, col, fs);
+                    } else {
+                        const t = `${cls} ${l.text}`, w2 = ctx.measureText(t).width;
+                        const gy = Math.max(0, d.y1 - fs - 5 - stackTop); stackTop += fs + 5;
+                        ctx.fillStyle = col; ctx.fillRect(d.x1, gy, w2 + 10, fs + 5);
+                        ctx.fillStyle = '#fff'; ctx.fillText(t, d.x1 + 5, gy + 2);
+                    }
+                });
+            } else {
+                const conf = (typeof d.confidence === 'number') ? ` ${Math.round(d.confidence * 100)}%` : '';
+                const model = s.modelName || s.label || '';
+                const lab = rich ? `${model}${addon ? ' · ' + addon : ''} · ${cls}${conf}` : `${cls}${conf}`;
+                const tw = ctx.measureText(lab).width;
+                const ly = Math.max(0, d.y1 - fs - 5);
+                ctx.fillStyle = baseCol; ctx.fillRect(d.x1, ly, tw + 10, fs + 5);
+                ctx.fillStyle = '#fff'; ctx.fillText(lab, d.x1 + 5, ly + 2);
+            }
+        });
+    });
+}
+
+// MANUAL: frame beku + kotak di snapView (video disembunyikan).
 function drawOverlay(result, dataUrl) {
     const cv = document.getElementById('snapView');
     if (!cv) return;
@@ -212,54 +334,31 @@ function drawOverlay(result, dataUrl) {
         cv.width = img.naturalWidth; cv.height = img.naturalHeight;
         const ctx = cv.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        const fs = Math.max(15, Math.round(cv.width / 60));
-        ctx.font = `bold ${fs}px sans-serif`; ctx.textBaseline = 'top';
-        ctx.lineWidth = Math.max(2, Math.round(cv.width / 450));
-        const seen = new Set();
-        (result.steps || []).forEach(s => {
-            (s.detections || []).forEach(d => {
-                if (d.x1 == null) return;
-                // hindari gambar dobel kalau objek sama muncul di 2 step
-                const key = `${Math.round(d.x1)},${Math.round(d.y1)},${Math.round(d.x2)},${Math.round(d.y2)},${d.class_id}`;
-                if (seen.has(key)) return; seen.add(key);
-
-                const gdt = d.gdt ? (Array.isArray(d.gdt) ? d.gdt : [d.gdt]) : null;
-                const baseCol = DET_COLORS[(d.class_id || 0) % DET_COLORS.length];
-                const boxCol = gdt ? (gdt.some(l => !l.ok) ? '#ef4444' : '#22c55e') : baseCol;
-                // kotak deteksi
-                ctx.strokeStyle = boxCol;
-                ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
-                // label kelas + confidence di atas kotak
-                const cls = d.class_name || ('#' + (d.class_id != null ? d.class_id : '?'));
-                const conf = (typeof d.confidence === 'number') ? ` ${Math.round(d.confidence * 100)}%` : '';
-                const lab = cls + conf;
-                const tw = ctx.measureText(lab).width;
-                const ly = Math.max(0, d.y1 - fs - 6);
-                ctx.fillStyle = baseCol; ctx.fillRect(d.x1, ly, tw + 12, fs + 6);
-                ctx.fillStyle = '#fff'; ctx.fillText(lab, d.x1 + 6, ly + 3);
-                // angka GD&T (kalau ada) di bawah kotak
-                if (gdt) {
-                    let gy = d.y2 + 3;
-                    gdt.forEach(l => {
-                        const col = l.ok ? '#22c55e' : '#ef4444';
-                        const w2 = ctx.measureText(l.text).width;
-                        ctx.fillStyle = col; ctx.fillRect(d.x1, gy, w2 + 12, fs + 6);
-                        ctx.fillStyle = '#fff'; ctx.fillText(l.text, d.x1 + 6, gy + 3);
-                        gy += fs + 6;
-                    });
-                }
-            });
-        });
+        drawBoxes(ctx, result, cv.width);
         document.getElementById('snapImg').style.display = 'none';
+        document.getElementById('cam').style.display = 'none';
         cv.style.display = 'block';
     };
     img.src = dataUrl;
 }
 
+// LIVE: kotak TRANSPARAN di atas video yang tetap jalan (tidak beku/blink).
+function drawLiveOverlay(result) {
+    const video = document.getElementById('cam');
+    const cv = document.getElementById('liveOverlay');
+    if (!cv || !video || !video.videoWidth) return;
+    if (cv.width !== video.videoWidth) cv.width = video.videoWidth;
+    if (cv.height !== video.videoHeight) cv.height = video.videoHeight;
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);   // transparan → video tembus
+    drawBoxes(ctx, result, cv.width);
+    cv.style.display = 'block';
+}
+
 function renderResult(result, dataUrl) {
-    // Update Total Status via layout.js helper
-    window.setTotalStatus(result.finalVerdict);
-    drawOverlay(result, dataUrl);
+    // Update Total Status via layout.js helper (opsional — run.html tak selalu punya badge)
+    if (typeof window.setTotalStatus === 'function') window.setTotalStatus(result.finalVerdict);
+    if (live) drawLiveOverlay(result); else drawOverlay(result, dataUrl);
 
     // Update step rows
     document.getElementById('stepRows').innerHTML = result.steps.map(s => `
@@ -309,22 +408,6 @@ function renderResult(result, dataUrl) {
     document.getElementById('ngCount').textContent = ngCount;
     document.getElementById('avgCycle').textContent = total ? Math.round(msSum / total) : '-';
     document.getElementById('okRatio').textContent = total ? Math.round((okCount / total) * 100) + '%' : '-';
-
-    // Filmstrip riwayat capture terakhir
-    addFilmstrip(dataUrl, result.finalVerdict);
-}
-
-function addFilmstrip(dataUrl, verdict) {
-    filmstripItems.unshift({ dataUrl, verdict });
-    filmstripItems = filmstripItems.slice(0, 20);
-    const strip = document.getElementById('filmstrip');
-    if (!strip) return;
-    strip.innerHTML = filmstripItems.map(it =>
-        `<div class="film-item ${it.verdict === 'OK' ? 'ok' : 'ng'}" ` +
-        `style="border:2px solid ${it.verdict === 'OK' ? 'var(--ok)' : 'var(--ng)'};` +
-        `border-radius:3px;overflow:hidden;flex:0 0 auto">` +
-        `<img src="${it.dataUrl}" style="height:56px;display:block"></div>`
-    ).join('');
 }
 
 init();

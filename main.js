@@ -415,10 +415,10 @@ ipcMain.handle('workflow:save', (_, { project, steps, onFirstNG }) =>
     projects.saveWorkflow(projectsRoot, project, steps, onFirstNG));
 
 // ---- Run / Inference ----
-ipcMain.handle('run:inspect', async (_, { project, imageDataUrl }) => {
+ipcMain.handle('run:inspect', async (_, { project, imageDataUrl, opts }) => {
     // imageDataUrl = "data:image/jpeg;base64,..."
     const proj = projects.load(projectsRoot, project);
-    return workflow.execute(cfg, proj, imageDataUrl, arduino, output);
+    return workflow.execute(cfg, proj, imageDataUrl, arduino, output, opts || {});
 });
 
 // ---- Auto-Calibration ----
