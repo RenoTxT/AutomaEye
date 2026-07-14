@@ -2,7 +2,7 @@
   "name": "SH1160",
   "description": "AI detection untuk Socket Holder 1160",
   "createdAt": "2026-07-11T03:07:48.055Z",
-  "updatedAt": "2026-07-14T03:57:28.774Z",
+  "updatedAt": "2026-07-14T07:18:30.373Z",
   "models": [
     {
       "name": "Object Detector",
@@ -97,6 +97,89 @@
       "lastPrecision": 0.9943,
       "lastRecall": 0.9909,
       "lastF1": 0.9925970884545637
+    },
+    {
+      "name": "Presence Detector",
+      "type": "AI Detection",
+      "addons": [
+        "Presence Check"
+      ],
+      "addonConfig": {},
+      "classes": [
+        "object"
+      ],
+      "training": {
+        "epochs": 100,
+        "batch": 16,
+        "imgsz": 640,
+        "lr": 0.01,
+        "augRotate": true,
+        "augFlip": true,
+        "augBlur": false,
+        "augExposure": true,
+        "augNoise": false
+      },
+      "trained": false,
+      "createdAt": "2026-07-14T05:46:00.582Z",
+      "updatedAt": "2026-07-14T05:46:00.582Z",
+      "lastMAP": 0,
+      "lastPrecision": 0,
+      "lastRecall": 0,
+      "lastF1": 0
+    },
+    {
+      "name": "Measurement",
+      "type": "AI Segmentation",
+      "addons": [
+        "GD&T Measurement"
+      ],
+      "addonConfig": {
+        "gdt": {
+          "mmPerPixel": null,
+          "perClass": {
+            "holebig": {
+              "shape": "circle",
+              "dia": {
+                "nominalMM": 2.5,
+                "toleranceMM": 0.5
+              }
+            },
+            "box": {
+              "shape": "rect",
+              "long": {
+                "nominalMM": 18,
+                "toleranceMM": 0.5
+              },
+              "short": {
+                "nominalMM": 8.5,
+                "toleranceMM": 0.5
+              }
+            }
+          }
+        }
+      },
+      "classes": [
+        "holebig",
+        "box"
+      ],
+      "training": {
+        "epochs": 100,
+        "batch": 16,
+        "imgsz": 640,
+        "lr": 0.01,
+        "augRotate": true,
+        "augFlip": true,
+        "augBlur": false,
+        "augExposure": true,
+        "augNoise": false
+      },
+      "trained": false,
+      "createdAt": "2026-07-14T05:46:47.008Z",
+      "updatedAt": "2026-07-14T07:16:38.868Z",
+      "lastMAP": 0,
+      "lastPrecision": 0,
+      "lastRecall": 0,
+      "lastF1": 0
     }
   ],
   "workflow": {
@@ -113,13 +196,13 @@
         "stepIndex": 1
       },
       {
-        "modelName": "Object Detector",
+        "modelName": "Presence Detector",
         "category": "Positioning",
         "continueOn": "always",
         "stepIndex": 2
       },
       {
-        "modelName": "Socket Measurement",
+        "modelName": "Measurement",
         "category": "Inspection",
         "continueOn": "always",
         "stepIndex": 3

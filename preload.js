@@ -70,6 +70,8 @@ contextBridge.exposeInMainWorld('api', {
     arduinoGate: (kind) => ipcRenderer.invoke('arduino:gate', { kind }),
     arduinoStatus: () => ipcRenderer.invoke('arduino:status'),
     arduinoReconnect: () => ipcRenderer.invoke('arduino:reconnect'),
+    arduinoListPorts: () => ipcRenderer.invoke('arduino:listPorts'),
+    arduinoSetPort: (port) => ipcRenderer.invoke('arduino:setPort', { port }),
 
     // Auto-Calibration
     runCalibration: (project, model) => ipcRenderer.invoke('calibration:run', { project, model }),

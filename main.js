@@ -462,16 +462,38 @@ ipcMain.handle('arduino:gate', async (_, { kind }) => {
 
 // Status koneksi Arduino/Wemos (untuk indikator di halaman Run).
 ipcMain.handle('arduino:status', () => {
-    try { return { ...arduino.status(), port: cfg.arduino && cfg.arduino.port, baud: cfg.arduino && cfg.arduino.baud }; }
-    catch (e) { return { connected: false, error: e.message }; }
+    try {
+        const conn = arduino.connectedPort ? arduino.connectedPort() : null;
+        return { ...arduino.status(), port: conn || (cfg.arduino && cfg.arduino.port), baud: cfg.arduino && cfg.arduino.baud };
+    } catch (e) { return { connected: false, error: e.message }; }
 });
 
-// Buka ulang port serial (mis. setelah Serial Monitor ditutup) tanpa restart app.
+// Daftar COM port yang tersedia (untuk dropdown pemilihan).
+ipcMain.handle('arduino:listPorts', async () => {
+    try { return await arduino.listPorts(); } catch (e) { return []; }
+});
+
+// Set COM port (mis. dari dropdown) → simpan ke config & reconnect.
+ipcMain.handle('arduino:setPort', async (_, { port }) => {
+    try {
+        cfg.arduino.port = port || 'auto';
+        saveConfig();
+        arduino.close();
+        await arduino.init(cfg.arduino);
+        const conn = arduino.connectedPort ? arduino.connectedPort() : null;
+        return { ok: true, ...arduino.status(), port: conn || cfg.arduino.port, baud: cfg.arduino.baud };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// Buka ulang port serial (auto-deteksi COM). Dipakai setelah Serial Monitor ditutup / ganti kabel.
 ipcMain.handle('arduino:reconnect', async () => {
     try {
         arduino.close();
         await arduino.init(cfg.arduino);
-        return { ok: true, ...arduino.status(), port: cfg.arduino.port, baud: cfg.arduino.baud };
+        const conn = arduino.connectedPort ? arduino.connectedPort() : null;
+        return { ok: true, ...arduino.status(), port: conn || cfg.arduino.port, baud: cfg.arduino.baud };
     } catch (e) {
         return { ok: false, error: e.message, port: cfg.arduino && cfg.arduino.port };
     }

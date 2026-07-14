@@ -44,6 +44,12 @@ def main():
             return None
         try:
             cnt = np.array(contour, dtype=np.float32).reshape(-1, 1, 2)
+            # Haluskan kontur: buang duri/noise kecil di tepi mask supaya ukuran lebih stabil
+            # (kurangi fluktuasi minAreaRect akibat pantulan/kilau).
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.008 * peri, True)
+            if approx is not None and len(approx) >= 3:
+                cnt = approx.astype(np.float32)
             (_, _), radius = cv2.minEnclosingCircle(cnt)
             (_, _), (w, h), _ = cv2.minAreaRect(cnt)
             return {

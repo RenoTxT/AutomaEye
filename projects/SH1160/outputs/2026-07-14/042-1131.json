@@ -1,0 +1,29 @@
+{
+  "seq": 42,
+  "timestamp": "2026-07-14T04:31:10.532Z",
+  "finalVerdict": "NG",
+  "totalMS": 111,
+  "steps": [
+    {
+      "stepIndex": 1,
+      "category": "Capture",
+      "label": "Kamera / Webcam",
+      "verdict": "OK",
+      "confidence": 0,
+      "reason": "Sumber: kamera · gambar 68KB diterima",
+      "stepMS": 0
+    },
+    {
+      "stepIndex": 2,
+      "category": "Positioning",
+      "modelName": "Object Detector",
+      "label": "Object Detector",
+      "verdict": "NG",
+      "confidence": 0,
+      "detections": [],
+      "reason": "Part tidak ditemukan — posisi tidak terkunci",
+      "stepMS": 111
+    }
+  ],
+  "image": "042-1131.jpg"
+}

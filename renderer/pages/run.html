@@ -7,6 +7,8 @@
 <style>
     /* Panel Run pakai lebih banyak ruang vertikal supaya semua section muat. */
     .run-layout { height: calc(100vh - 120px) !important; }
+    .spinner { width: 42px; height: 42px; border: 4px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .results-panel .results-section h4 { margin: 4px 0 6px; }
 </style>
 <script>window.LAYOUT_OPTS = { title: 'Run Workflow', subtitle: 'Live Inspection', mode: 'run', showTotalStatus: true };</script>
@@ -25,8 +27,17 @@
     </div>
 
     <div class="run-layout">
-        <!-- LEFT: Palette (workflow chain readonly) -->
-        <div class="palette" id="palette"></div>
+        <!-- LEFT: Palette (workflow chain) + Step Results di bawahnya -->
+        <div style="display:flex;flex-direction:column;overflow:hidden;min-height:0">
+            <div class="palette" id="palette" style="flex:1 1 auto;overflow-y:auto"></div>
+            <div class="results-section" style="border-top:1px solid var(--border);flex:0 0 auto;max-height:240px;overflow-y:auto">
+                <h4>Step Results</h4>
+                <table class="table">
+                    <thead><tr><th>#</th><th>Model</th><th>Verdict</th><th>Conf</th></tr></thead>
+                    <tbody id="stepRows"><tr><td colspan="4" class="muted">Belum ada hasil</td></tr></tbody>
+                </table>
+            </div>
+        </div>
 
         <!-- CENTER: Image viewer + filmstrip -->
         <div class="camera-panel">
@@ -37,6 +48,10 @@
                 <canvas id="liveOverlay" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); max-width:100%; max-height:100%; pointer-events:none; display:none"></canvas>
                 <canvas id="snap" style="display:none"></canvas>
                 <div id="noSignal" style="color:#666">📷 Klik Start Camera</div>
+                <div id="loadingOverlay" style="position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.45);color:#fff;z-index:5;gap:10px">
+                    <div class="spinner"></div>
+                    <div style="font-size:14px">Mendeteksi…</div>
+                </div>
             </div>
         </div>
 
@@ -52,6 +67,8 @@
                 <label style="display:block;font-size:12px;margin-bottom:4px">Ketelitian ukur (imgsz)
                     <input type="number" id="measImgsz" value="1280" min="320" max="1920" step="32" style="width:90px"></label>
                 <p class="muted" style="font-size:10px;margin:0 0 4px">Makin besar = mask lebih halus & ukuran lebih konsisten (lebih lambat, tapi cuma 1×/part). 1280 disarankan.</p>
+                <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="measBox"> Ukur dari kotak (lebih stabil dari mask)</label>
+                <p class="muted" style="font-size:10px;margin:0 0 4px">Aktifkan kalau ukuran dari mask fluktuatif (mis. logam mengilap). Kotak deteksi lebih konsisten walau sedikit kurang presisi.</p>
                 <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="labelToggle" checked> Label model+addon</label>
                 <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="trackToggle" checked> Tracking (1 nomor & 1 sinyal per part)</label>
                 <label style="display:block;font-size:12px;margin-bottom:4px">Diam N frame utk inspeksi
@@ -62,13 +79,6 @@
                 <p class="muted" id="partInfo" style="font-size:11px;margin:2px 0 0">Part: — · menunggu part</p>
                 <p class="muted" id="fpsInfo" style="font-size:11px;margin:2px 0 0">FPS: — · infer — ms</p>
                 <button class="btn small" type="button" onclick="openGdtTuning()" style="margin-top:6px">🎯 Tuning GD&amp;T (mm/piksel dari objek dikenal)</button>
-            </div>
-            <div class="results-section" style="max-height:150px; overflow-y:auto">
-                <h4>Step Results</h4>
-                <table class="table">
-                    <thead><tr><th>#</th><th>Model</th><th>Verdict</th><th>Conf</th></tr></thead>
-                    <tbody id="stepRows"><tr><td colspan="4" class="muted">Belum ada hasil</td></tr></tbody>
-                </table>
             </div>
             <div class="results-section">
                 <h4>Counter</h4>
@@ -84,7 +94,11 @@
             <div class="results-section">
                 <h4>Event Log</h4>
                 <p id="ardStatus" class="muted" style="font-size:11px;margin:0 0 4px">🔌 mengecek Arduino…</p>
-                <button class="btn small" type="button" onclick="reconnectArduino(this)" style="margin-bottom:6px">🔌 Reconnect Arduino</button>
+                <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+                    <label style="font-size:11px">COM
+                        <select id="portSelect" onchange="setPort(this.value)" style="max-width:150px"><option value="auto">Auto-deteksi</option></select></label>
+                    <button class="btn small" type="button" onclick="reconnectArduino(this)">🔌 Reconnect</button>
+                </div>
                 <div id="eventLog" style="max-height:120px; overflow-y:auto; font-family:monospace"></div>
             </div>
             <div class="results-section" style="border:none">
@@ -164,6 +178,7 @@ async function init() {
     projectData = await window.api.loadProject(projectName);
     renderPalette();
     refreshArduinoStatus();
+    loadPorts();
     setInterval(refreshArduinoStatus, 5000);
 }
 
@@ -290,13 +305,15 @@ async function inspectFrame(forceFull) {
             const pc = parseFloat(document.getElementById('presenceConf').value);
             const presConf = isNaN(pc) ? confVal : pc;
             const lite = await window.api.inspect(projectName, dataUrl,
-                { confidence: presConf, light: true, noSignal: true, noSave: true });
+                { confidence: presConf, presenceConf: presConf, light: true, noSignal: true, noSave: true });
             updateFps(performance.now() - t0, lite);
             await handleTracking(lite, dataUrl, confVal);
         } else {
             // Mode biasa / Capture manual: semua model jalan.
+            // presenceConf → Object Detector (Positioning) tetap pakai ambang rendah supaya konsisten.
+            const pcm = parseFloat((document.getElementById('presenceConf') || {}).value);
             const result = await window.api.inspect(projectName, dataUrl,
-                { confidence: confVal, noSignal: trackMode() });
+                { confidence: confVal, presenceConf: isNaN(pcm) ? undefined : pcm, noSignal: trackMode() });
             updateFps(performance.now() - t0, result);
             renderResult(result, dataUrl);
         }
@@ -311,10 +328,24 @@ async function inspectFrame(forceFull) {
 async function capture() {
     if (revertTimer) clearTimeout(revertTimer);
     if (live) toggleLive();                       // stop Live agar loop presence tidak menimpa hasil ukur
-    // tunggu inferensi live yang mungkin masih berjalan (guard maks ~30 dtk)
-    let guard = 0;
-    while (busy && guard++ < 300) await new Promise(r => setTimeout(r, 100));
-    await inspectFrame(true);                      // full: semua model → ukuran keluar (gambar dibekukan)
+    showLoading(true);
+    try {
+        // Tampilkan video lagi supaya frame yang diambil BUKAN hitam
+        // (setelah capture sebelumnya, snapView/beku menutupi video).
+        const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
+        const lo = document.getElementById('liveOverlay'); if (lo) lo.style.display = 'none';
+        document.getElementById('cam').style.display = 'block';
+        // tunggu inferensi live yang mungkin masih berjalan (guard maks ~30 dtk)
+        let guard = 0;
+        while (busy && guard++ < 300) await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 80));   // beri waktu video render 1 frame segar
+        await inspectFrame(true);                    // full: semua model → ukuran keluar (gambar dibekukan)
+    } finally { showLoading(false); }
+}
+
+function showLoading(on) {
+    const el = document.getElementById('loadingOverlay');
+    if (el) el.style.display = on ? 'flex' : 'none';
 }
 
 // Mode Live — inspeksi otomatis berulang, kotak deteksi terus diperbarui.
@@ -580,15 +611,41 @@ async function refreshArduinoStatus() {
     } catch (_) { el.textContent = '🔴 Status Arduino tak terbaca'; }
 }
 
-// Buka ulang port (setelah Serial Monitor Arduino IDE ditutup).
+// Buka ulang port (auto-deteksi COM).
 async function reconnectArduino(btn) {
     if (btn) { btn.disabled = true; btn.textContent = '🔌 menyambung…'; }
     let r = {};
     try { r = await window.api.arduinoReconnect(); } catch (e) { r = { ok: false, error: e.message }; }
-    await refreshArduinoStatus();
+    await refreshArduinoStatus(); await loadPorts();
     if (r && r.connected) logEvent(`Arduino tersambung (${esc(r.port || '?')} @ ${esc(String(r.baud || '?'))})`, 'ok');
-    else logEvent(`Reconnect GAGAL — ${esc((r && (r.error || 'port dipakai app lain? tutup Serial Monitor')) )}`, 'ng');
-    if (btn) { btn.disabled = false; btn.textContent = '🔌 Reconnect Arduino'; }
+    else logEvent(`Reconnect GAGAL — ${esc((r && (r.error || 'tidak ada board terdeteksi? cek kabel & tutup Serial Monitor')))}`, 'ng');
+    if (btn) { btn.disabled = false; btn.textContent = '🔌 Reconnect'; }
+}
+
+// Isi dropdown COM port dari daftar sistem.
+async function loadPorts() {
+    const sel = document.getElementById('portSelect');
+    if (!sel) return;
+    let ports = [];
+    try { ports = await window.api.arduinoListPorts(); } catch (_) { }
+    let conn = null;
+    try { const s = await window.api.arduinoStatus(); conn = s && s.connected ? s.port : null; } catch (_) { }
+    const cur = sel.value;
+    sel.innerHTML = '<option value="auto">Auto-deteksi</option>' +
+        (ports || []).map(p => {
+            const label = `${p.path}${p.manufacturer ? ' — ' + esc(p.manufacturer) : ''}`;
+            return `<option value="${esc(p.path)}">${label}</option>`;
+        }).join('');
+    // pertahankan pilihan / tandai yang terhubung
+    sel.value = (conn && [...sel.options].some(o => o.value === conn)) ? conn : (cur || 'auto');
+}
+
+async function setPort(port) {
+    logEvent(`Ganti COM → ${esc(port)} …`, 'sig');
+    let r = {};
+    try { r = await window.api.arduinoSetPort(port); } catch (e) { r = { ok: false, error: e.message }; }
+    await refreshArduinoStatus();
+    logEvent(r && r.connected ? `Tersambung (${esc(r.port || '?')})` : `Gagal buka ${esc(port)} — ${esc((r && (r.error || 'coba port lain')))}`, r && r.connected ? 'ok' : 'ng');
 }
 
 // ---- Alur tracking berbasis "DIAM" (settle):
@@ -662,7 +719,8 @@ async function inspectPart(dataUrl, confVal) {
     const mframe = grabDataUrl() || dataUrl;
     let full = lastLite || { steps: [], finalVerdict: 'OK' };
     const mImg = parseInt((document.getElementById('measImgsz') || {}).value);
-    try { full = await window.api.inspect(projectName, mframe, { confidence: confVal, light: false, noSignal: true, noSave: true, imgsz: isNaN(mImg) ? undefined : mImg }); }
+    const measBox = !!(document.getElementById('measBox') && document.getElementById('measBox').checked);
+    try { full = await window.api.inspect(projectName, mframe, { confidence: confVal, light: false, noSignal: true, noSave: true, imgsz: isNaN(mImg) ? undefined : mImg, measureFromBox: measBox }); }
     catch (_) { }
     const verdict = full.finalVerdict;
     if (trackCurrent) trackCurrent.verdict = verdict;
