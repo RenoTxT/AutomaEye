@@ -1,9 +1,7 @@
 task: detect
 mode: train
-model: C:\Users\LAB-AI-05\Desktop\TA 19\AutomaEyes\AutomaEyesApp\projects\SH1160\models\Object
-  Detector\runs\train\weights\last.pt
-data: C:\Users\LAB-AI-05\Desktop\TA 19\AutomaEyes\AutomaEyesApp\projects\SH1160\models\Object
-  Detector\dataset\data.yaml
+model: C:\Users\MHS\Desktop\TA 36\AutomaEye\projects\SH1160\models\Object Detector\runs\train\weights\last.pt
+data: C:\Users\MHS\Desktop\TA 36\AutomaEye\projects\SH1160\models\Object Detector\dataset\data.yaml
 epochs: 100
 time: null
 patience: 100
@@ -12,13 +10,13 @@ imgsz: 640
 save: true
 save_period: -1
 cache: false
-device: null
+device: ''
 workers: 0
-project: C:\Users\LAB-AI-05\Desktop\TA 19\AutomaEyes\AutomaEyesApp\projects\SH1160\models\Object
-  Detector\runs
+project: C:\Users\MHS\Desktop\TA 36\AutomaEye\projects\SH1160\models\Object Detector\runs
 name: train
 exist_ok: true
 pretrained: true
+cls_remap: true
 optimizer: auto
 verbose: true
 seed: 0
@@ -27,26 +25,26 @@ single_cls: false
 rect: false
 cos_lr: false
 close_mosaic: 10
-resume: C:\Users\LAB-AI-05\Desktop\TA 19\AutomaEyes\AutomaEyesApp\projects\SH1160\models\Object
-  Detector\runs\train\weights\last.pt
+resume: C:\Users\MHS\Desktop\TA 36\AutomaEye\projects\SH1160\models\Object Detector\runs\train\weights\last.pt
 amp: true
 fraction: 1.0
 profile: false
 freeze: null
-multi_scale: false
+multi_scale: 0.0
+compile: false
 overlap_mask: true
 mask_ratio: 4
 dropout: 0.0
 val: true
 split: val
 save_json: false
-save_hybrid: false
 conf: null
 iou: 0.7
 max_det: 300
-half: false
+quantize: null
 dnn: false
 plots: true
+end2end: null
 source: null
 vid_stride: 1
 stream_buffer: false
@@ -68,7 +66,6 @@ line_width: null
 format: torchscript
 keras: false
 optimize: false
-int8: false
 dynamic: false
 simplify: true
 opset: null
@@ -81,11 +78,16 @@ weight_decay: 0.0005
 warmup_epochs: 3.0
 warmup_momentum: 0.8
 warmup_bias_lr: 0.0
+distill_model: null
+dis: 6.0
 box: 7.5
 cls: 0.5
+cls_pw: 0.0
 dfl: 1.5
 pose: 12.0
 kobj: 1.0
+rle: 1.0
+angle: 1.0
 nbs: 64
 hsv_h: 0.015
 hsv_s: 0.7
@@ -100,12 +102,11 @@ fliplr: 0.5
 bgr: 0.0
 mosaic: 1.0
 mixup: 0.0
+cutmix: 0.0
 copy_paste: 0.0
 copy_paste_mode: flip
 auto_augment: randaugment
 erasing: 0.4
-crop_fraction: 1.0
 cfg: null
-tracker: botsort.yaml
-save_dir: C:\Users\LAB-AI-05\Desktop\TA 19\AutomaEyes\AutomaEyesApp\projects\SH1160\models\Object
-  Detector\runs\train
+tracker: tracktrack.yaml
+save_dir: C:\Users\MHS\Desktop\TA 36\AutomaEye\projects\SH1160\models\Object Detector\runs\train

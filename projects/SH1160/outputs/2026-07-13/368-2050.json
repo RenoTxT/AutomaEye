@@ -1,0 +1,330 @@
+{
+  "seq": 368,
+  "timestamp": "2026-07-13T13:50:55.848Z",
+  "finalVerdict": "NG",
+  "totalMS": 12920,
+  "steps": [
+    {
+      "stepIndex": 1,
+      "category": "Capture",
+      "label": "Kamera / Webcam",
+      "verdict": "OK",
+      "confidence": 0,
+      "reason": "Sumber: kamera · gambar 79KB diterima",
+      "stepMS": 0
+    },
+    {
+      "stepIndex": 2,
+      "category": "Positioning",
+      "modelName": "Object Detector",
+      "label": "Object Detector",
+      "verdict": "OK",
+      "confidence": 0.7377499341964722,
+      "detections": [
+        {
+          "x1": 4.4908447265625,
+          "y1": 0,
+          "x2": 1240.6781005859375,
+          "y2": 711.6145629882812,
+          "confidence": 0.7377499341964722,
+          "class_id": 0,
+          "class_name": "object"
+        }
+      ],
+      "reason": "Part terkunci di (623, 356)",
+      "stepMS": 5946
+    },
+    {
+      "stepIndex": 3,
+      "category": "Inspection",
+      "modelName": "Socket Measurement",
+      "label": "Socket Measurement",
+      "verdict": "NG",
+      "confidence": 0.608154833316803,
+      "detections": [
+        {
+          "x1": 46.99290466308594,
+          "y1": 96.2306137084961,
+          "x2": 137.95718383789062,
+          "y2": 274.5733337402344,
+          "confidence": 0.939582347869873,
+          "class_id": 3,
+          "class_name": "jarak_tab",
+          "measure": {
+            "diameterPx": 188.73281860351562,
+            "widthPx": 90,
+            "heightPx": 170,
+            "areaPx": 8036
+          },
+          "gdt": [
+            {
+              "text": "18.30",
+              "ok": true,
+              "kind": "long"
+            },
+            {
+              "text": "9.69",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 166.78262329101562,
+          "y1": 63.25293731689453,
+          "x2": 250.79879760742188,
+          "y2": 258.94024658203125,
+          "confidence": 0.916743278503418,
+          "class_id": 3,
+          "class_name": "jarak_tab",
+          "measure": {
+            "diameterPx": 200.87826538085938,
+            "widthPx": 94,
+            "heightPx": 196,
+            "areaPx": 8914
+          },
+          "gdt": [
+            {
+              "text": "21.10",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "10.12",
+              "ok": true,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 484.86700439453125,
+          "y1": 16.514007568359375,
+          "x2": 571.4774780273438,
+          "y2": 215.33480834960938,
+          "confidence": 0.9091101288795471,
+          "class_id": 3,
+          "class_name": "jarak_tab",
+          "measure": {
+            "diameterPx": 205.23178100585938,
+            "widthPx": 94,
+            "heightPx": 198,
+            "areaPx": 9478
+          },
+          "gdt": [
+            {
+              "text": "21.31",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "10.12",
+              "ok": true,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 357.263671875,
+          "y1": 42.67987823486328,
+          "x2": 457.07080078125,
+          "y2": 229.54168701171875,
+          "confidence": 0.9066599011421204,
+          "class_id": 3,
+          "class_name": "jarak_tab",
+          "measure": {
+            "diameterPx": 201.3333282470703,
+            "widthPx": 88.9041519165039,
+            "heightPx": 200.52439880371094,
+            "areaPx": 8912
+          },
+          "gdt": [
+            {
+              "text": "21.59",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "9.57",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 680.655029296875,
+          "y1": 4.1480865478515625,
+          "x2": 782.0849609375,
+          "y2": 186.65005493164062,
+          "confidence": 0.8741989731788635,
+          "class_id": 3,
+          "class_name": "jarak_tab",
+          "measure": {
+            "diameterPx": 203.4209442138672,
+            "widthPx": 102,
+            "heightPx": 180,
+            "areaPx": 9206
+          },
+          "gdt": [
+            {
+              "text": "19.38",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "10.98",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 811.2392578125,
+          "y1": 0,
+          "x2": 898.3232421875,
+          "y2": 174.02328491210938,
+          "confidence": 0.857110857963562,
+          "class_id": 3,
+          "class_name": "jarak_tab",
+          "measure": {
+            "diameterPx": 185.44021606445312,
+            "widthPx": 86,
+            "heightPx": 178,
+            "areaPx": 8396
+          },
+          "gdt": [
+            {
+              "text": "19.16",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "9.26",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 666.2264404296875,
+          "y1": 215.99923706054688,
+          "x2": 694.7022705078125,
+          "y2": 244.04708862304688,
+          "confidence": 0.7365341186523438,
+          "class_id": 1,
+          "class_name": "lubang_besar",
+          "measure": {
+            "diameterPx": 48.41507339477539,
+            "widthPx": 30,
+            "heightPx": 38,
+            "areaPx": 1014
+          },
+          "gdt": [
+            {
+              "text": "Ø5.21",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 272.4783935546875,
+          "y1": 269.578125,
+          "x2": 300.3258056640625,
+          "y2": 297.0145263671875,
+          "confidence": 0.7214629054069519,
+          "class_id": 1,
+          "class_name": "lubang_besar",
+          "measure": {
+            "diameterPx": 37.3156852722168,
+            "widthPx": 28,
+            "heightPx": 30,
+            "areaPx": 664
+          },
+          "gdt": [
+            {
+              "text": "Ø4.02",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 340.8646545410156,
+          "y1": 261.645751953125,
+          "x2": 367.8973693847656,
+          "y2": 287.8272705078125,
+          "confidence": 0.678264319896698,
+          "class_id": 1,
+          "class_name": "lubang_besar",
+          "measure": {
+            "diameterPx": 42.426605224609375,
+            "widthPx": 30,
+            "heightPx": 30,
+            "areaPx": 900
+          },
+          "gdt": [
+            {
+              "text": "Ø4.57",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 987.6981201171875,
+          "y1": 175.4849090576172,
+          "x2": 1015.1778564453125,
+          "y2": 202.6268768310547,
+          "confidence": 0.6254569292068481,
+          "class_id": 1,
+          "class_name": "lubang_besar",
+          "measure": {
+            "diameterPx": 41.036766052246094,
+            "widthPx": 30,
+            "heightPx": 30,
+            "areaPx": 838
+          },
+          "gdt": [
+            {
+              "text": "Ø4.42",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 922.8419799804688,
+          "y1": 183.81959533691406,
+          "x2": 948.2714233398438,
+          "y2": 209.0267791748047,
+          "confidence": 0.608154833316803,
+          "class_id": 1,
+          "class_name": "lubang_besar",
+          "measure": {
+            "diameterPx": 37.939117431640625,
+            "widthPx": 28,
+            "heightPx": 30,
+            "areaPx": 696
+          },
+          "gdt": [
+            {
+              "text": "Ø4.08",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "addon": "GD&T",
+          "pass": false,
+          "detail": "jarak_tab long=18.30mm · jarak_tab short=9.69mm ✗(10±0.3) · jarak_tab long=21.10mm ✗(18.5±0.3) · jarak_tab short=10.12mm · jarak_tab long=21.31mm ✗(18.5±0.3) · jarak_tab short=10.12mm · jarak_tab long=21.59mm ✗(18.5±0.3) · jarak_tab short=9.57mm ✗(10±0.3) · jarak_tab long=19.38mm ✗(18.5±0.3) · jarak_tab short=10.98mm ✗(10±0.3) · jarak_tab long=19.16mm ✗(18.5±0.3) · jarak_tab short=9.26mm ✗(10±0.3) · lubang_besar dia=5.21mm ✗(2.5±0.3) · lubang_besar dia=4.02mm ✗(2.5±0.3) · lubang_besar dia=4.57mm ✗(2.5±0.3) · lubang_besar dia=4.42mm ✗(2.5±0.3) · lubang_besar dia=4.08mm ✗(2.5±0.3)"
+        }
+      ],
+      "reason": "GD&T: jarak_tab long=18.30mm · jarak_tab short=9.69mm ✗(10±0.3) · jarak_tab long=21.10mm ✗(18.5±0.3) · jarak_tab short=10.12mm · jarak_tab long=21.31mm ✗(18.5±0.3) · jarak_tab short=10.12mm · jarak_tab long=21.59mm ✗(18.5±0.3) · jarak_tab short=9.57mm ✗(10±0.3) · jarak_tab long=19.38mm ✗(18.5±0.3) · jarak_tab short=10.98mm ✗(10±0.3) · jarak_tab long=19.16mm ✗(18.5±0.3) · jarak_tab short=9.26mm ✗(10±0.3) · lubang_besar dia=5.21mm ✗(2.5±0.3) · lubang_besar dia=4.02mm ✗(2.5±0.3) · lubang_besar dia=4.57mm ✗(2.5±0.3) · lubang_besar dia=4.42mm ✗(2.5±0.3) · lubang_besar dia=4.08mm ✗(2.5±0.3)",
+      "stepMS": 6974
+    }
+  ],
+  "image": "368-2050.jpg"
+}

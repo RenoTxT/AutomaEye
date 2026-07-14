@@ -121,6 +121,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
     arduino.close();
+    inference.stopInferServer();
     projects.stopLabelStudioServer();
     if (process.platform !== 'darwin') app.quit();
 });
@@ -419,6 +420,61 @@ ipcMain.handle('run:inspect', async (_, { project, imageDataUrl, opts }) => {
     // imageDataUrl = "data:image/jpeg;base64,..."
     const proj = projects.load(projectsRoot, project);
     return workflow.execute(cfg, proj, imageDataUrl, arduino, output, opts || {});
+});
+
+// Kirim satu sinyal Arduino/PLC untuk SATU part (dipakai mode tracking:
+// verdict dikirim sekali per part, bukan tiap frame).
+ipcMain.handle('arduino:signal', async (_, { verdict }) => {
+    try {
+        const ng = verdict === 'NG';
+        const sig = ng ? cfg.arduino.ng_signal : cfg.arduino.ok_signal;
+        if (ng || cfg.arduino.signal_on_ok) await arduino.send(String(sig));
+        return { ok: true, sent: ng || cfg.arduino.signal_on_ok };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// Simpan foto BER-OVERLAY (measurement + verdict) dari renderer, mode tracking.
+ipcMain.handle('run:saveAnnotated', (_, { project, imageDataUrl, result }) => {
+    try {
+        const proj = projects.load(projectsRoot, project);
+        const base64 = String(imageDataUrl || '').replace(/^data:image\/[^;]+;base64,/, '');
+        const saved = output.record(proj, base64, result || { finalVerdict: 'NG', steps: [] }, cfg);
+        return { ok: true, imgPath: saved.imgPath };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// Gate open/close (mode tracking): 'O' saat part terdeteksi+diukur, 'C' saat part keluar frame.
+ipcMain.handle('arduino:gate', async (_, { kind }) => {
+    try {
+        let sig = kind === 'open' ? (cfg.arduino.open_signal || 'O') : (cfg.arduino.close_signal || 'C');
+        sig = String(sig);
+        if (!sig.endsWith('\n')) sig += '\n';
+        const r = await arduino.send(sig);
+        return { ok: !!(r && r.ok), sig: sig.trim(), reason: r && r.reason };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// Status koneksi Arduino/Wemos (untuk indikator di halaman Run).
+ipcMain.handle('arduino:status', () => {
+    try { return { ...arduino.status(), port: cfg.arduino && cfg.arduino.port, baud: cfg.arduino && cfg.arduino.baud }; }
+    catch (e) { return { connected: false, error: e.message }; }
+});
+
+// Buka ulang port serial (mis. setelah Serial Monitor ditutup) tanpa restart app.
+ipcMain.handle('arduino:reconnect', async () => {
+    try {
+        arduino.close();
+        await arduino.init(cfg.arduino);
+        return { ok: true, ...arduino.status(), port: cfg.arduino.port, baud: cfg.arduino.baud };
+    } catch (e) {
+        return { ok: false, error: e.message, port: cfg.arduino && cfg.arduino.port };
+    }
 });
 
 // ---- Auto-Calibration ----

@@ -1,0 +1,36 @@
+{
+  "seq": 61,
+  "timestamp": "2026-07-13T12:03:25.317Z",
+  "finalVerdict": "NG",
+  "totalMS": 8656,
+  "steps": [
+    {
+      "stepIndex": 1,
+      "category": "Capture",
+      "label": "Kamera / Webcam",
+      "verdict": "OK",
+      "confidence": 0,
+      "reason": "Sumber: kamera · gambar 66KB diterima",
+      "stepMS": 0
+    },
+    {
+      "stepIndex": 2,
+      "category": "Inspection",
+      "modelName": "Object Detector",
+      "label": "Object Detector",
+      "verdict": "NG",
+      "confidence": 0,
+      "detections": [],
+      "checks": [
+        {
+          "addon": "Presence Check",
+          "pass": false,
+          "detail": "Tidak ada objek — part hilang"
+        }
+      ],
+      "reason": "Presence Check: Tidak ada objek — part hilang",
+      "stepMS": 8656
+    }
+  ],
+  "image": "061-1903.jpg"
+}

@@ -65,6 +65,11 @@ contextBridge.exposeInMainWorld('api', {
 
     // Run
     inspect: (project, imageDataUrl, opts) => ipcRenderer.invoke('run:inspect', { project, imageDataUrl, opts }),
+    saveAnnotated: (project, imageDataUrl, result) => ipcRenderer.invoke('run:saveAnnotated', { project, imageDataUrl, result }),
+    arduinoSignal: (verdict) => ipcRenderer.invoke('arduino:signal', { verdict }),
+    arduinoGate: (kind) => ipcRenderer.invoke('arduino:gate', { kind }),
+    arduinoStatus: () => ipcRenderer.invoke('arduino:status'),
+    arduinoReconnect: () => ipcRenderer.invoke('arduino:reconnect'),
 
     // Auto-Calibration
     runCalibration: (project, model) => ipcRenderer.invoke('calibration:run', { project, model }),
