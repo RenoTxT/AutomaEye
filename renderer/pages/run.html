@@ -49,6 +49,9 @@
                 <label style="display:block;font-size:12px;margin-bottom:4px">Confidence presence (deteksi part)
                     <input type="number" id="presenceConf" value="0.2" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
                 <p class="muted" style="font-size:10px;margin:0 0 4px">Lebih rendah = part terdeteksi lebih cepat walau masih bergerak/blur.</p>
+                <label style="display:block;font-size:12px;margin-bottom:4px">Ketelitian ukur (imgsz)
+                    <input type="number" id="measImgsz" value="1280" min="320" max="1920" step="32" style="width:90px"></label>
+                <p class="muted" style="font-size:10px;margin:0 0 4px">Makin besar = mask lebih halus & ukuran lebih konsisten (lebih lambat, tapi cuma 1×/part). 1280 disarankan.</p>
                 <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="labelToggle" checked> Label model+addon</label>
                 <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="trackToggle" checked> Tracking (1 nomor & 1 sinyal per part)</label>
                 <label style="display:block;font-size:12px;margin-bottom:4px">Diam N frame utk inspeksi
@@ -658,7 +661,8 @@ async function inspectPart(dataUrl, confVal) {
     logEvent(`Part #${trackCurrent.id} <strong>berhenti</strong> → inspeksi`, 'in');
     const mframe = grabDataUrl() || dataUrl;
     let full = lastLite || { steps: [], finalVerdict: 'OK' };
-    try { full = await window.api.inspect(projectName, mframe, { confidence: confVal, light: false, noSignal: true, noSave: true }); }
+    const mImg = parseInt((document.getElementById('measImgsz') || {}).value);
+    try { full = await window.api.inspect(projectName, mframe, { confidence: confVal, light: false, noSignal: true, noSave: true, imgsz: isNaN(mImg) ? undefined : mImg }); }
     catch (_) { }
     const verdict = full.finalVerdict;
     if (trackCurrent) trackCurrent.verdict = verdict;
