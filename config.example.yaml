@@ -15,6 +15,14 @@ arduino:
   ok_signal: '0'
   ng_signal: '1'
   signal_on_ok: false
+  # Handshake opsional (mode Live kontinu): tunggu Arduino/PLC mengirim token ini
+  # sebagai tanda output/gerbang sudah menutup lagi, sebelum deteksi berikutnya.
+  # Kosongkan (hapus/'') kalau Arduino tidak mengirim balasan → langsung lanjut.
+  handshake_token: ''        # mis. 'C' atau 'READY' atau 'DONE'
+  handshake_timeout_ms: 5000 # batas tunggu supaya tak menggantung
+  # Mode tracking: sinyal gate saat part masuk (open) & keluar frame (close).
+  open_signal: 'O'           # dikirim ketika part terdeteksi & diukur
+  close_signal: 'C'          # dikirim ketika part keluar dari frame
 model:
   confidence: 0.35
   iou: 0.45

@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <title>Run — AutomaEyes</title>
 <link rel="stylesheet" href="../css/style.css">
+<style>
+    /* Panel Run pakai lebih banyak ruang vertikal supaya semua section muat. */
+    .run-layout { height: calc(100vh - 120px) !important; }
+    .results-panel .results-section h4 { margin: 4px 0 6px; }
+</style>
 <script>window.LAYOUT_OPTS = { title: 'Run Workflow', subtitle: 'Live Inspection', mode: 'run', showTotalStatus: true };</script>
 </head>
 <body>
@@ -36,17 +41,23 @@
         </div>
 
         <!-- RIGHT: Properties / Results -->
-        <div class="results-panel">
+        <div class="results-panel" style="overflow-y:auto">
             <div class="results-section">
                 <h4>Live Settings</h4>
-                <label style="display:block;font-size:12px;margin-bottom:4px">Interval (ms)
-                    <input type="number" id="liveIntervalMs" value="120" min="50" step="10" style="width:90px" onchange="restartLive()"></label>
                 <label style="display:block;font-size:12px;margin-bottom:4px">Confidence
                     <input type="number" id="liveConf" value="0.5" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
                 <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="labelToggle" checked> Label model+addon</label>
+                <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="trackToggle" checked> Tracking (1 nomor & 1 sinyal per part)</label>
+                <label style="display:block;font-size:12px;margin-bottom:4px">Diam N frame utk inspeksi
+                    <input type="number" id="settleFrames" value="3" min="1" max="15" style="width:60px"></label>
+                <p class="muted" style="font-size:10px;margin:0 0 4px">Part diperiksa setelah berhenti bergerak selama N frame (cegah inspeksi saat masih jatuh).</p>
+                <label style="display:block;font-size:12px;margin-bottom:4px">Frame kosong utk 'keluar'
+                    <input type="number" id="exitFrames" value="2" min="1" max="10" style="width:60px"></label>
+                <p class="muted" id="partInfo" style="font-size:11px;margin:2px 0 0">Part: — · menunggu part</p>
                 <p class="muted" id="fpsInfo" style="font-size:11px;margin:2px 0 0">FPS: — · infer — ms</p>
+                <button class="btn small" type="button" onclick="openGdtTuning()" style="margin-top:6px">🎯 Tuning GD&amp;T (mm/piksel dari objek dikenal)</button>
             </div>
-            <div class="results-section" style="flex:1 1 0; min-height:120px; overflow-y:auto">
+            <div class="results-section" style="max-height:150px; overflow-y:auto">
                 <h4>Step Results</h4>
                 <table class="table">
                     <thead><tr><th>#</th><th>Model</th><th>Verdict</th><th>Conf</th></tr></thead>
@@ -62,11 +73,17 @@
                 </div>
                 <p class="muted" style="margin-top:8px; font-size:11px">Avg cycle: <strong id="avgCycle">-</strong> ms</p>
                 <p class="muted" style="margin-top:4px; font-size:11px">Ok Ratio: <strong id="okRatio">-</strong></p>
+                <button class="btn small" type="button" onclick="resetCounters()" style="margin-top:6px">↺ Reset counter & log</button>
+            </div>
+            <div class="results-section">
+                <h4>Event Log</h4>
+                <p id="ardStatus" class="muted" style="font-size:11px;margin:0 0 4px">🔌 mengecek Arduino…</p>
+                <button class="btn small" type="button" onclick="reconnectArduino(this)" style="margin-bottom:6px">🔌 Reconnect Arduino</button>
+                <div id="eventLog" style="max-height:120px; overflow-y:auto; font-family:monospace"></div>
             </div>
             <div class="results-section" style="border:none">
                 <h4>Info</h4>
-                <p style="font-size:11px" class="muted">NG image: <code>outputs/YYYY-MM-DD/NNN-HHMM.jpg</code></p>
-                <p style="font-size:11px" class="muted">Arduino sinyal: NG="1", OK="0"</p>
+                <p style="font-size:11px" class="muted">Alur: presence (Positioning) jalan terus → part masuk = beri nomor + ukur 1× (layer 0,5 dtk) → sinyal 'O' → part keluar = sinyal 'C'.</p>
             </div>
         </div>
     </div>
@@ -79,13 +96,69 @@ document.getElementById('backLink').onclick = () => window.api.goTo(`project.htm
 
 const CATEGORIES = ['Capture', 'Positioning', 'Inspection', 'Communication', 'Options'];
 let stream = null;
-let total = 0, okCount = 0, ngCount = 0, msSum = 0;
+let total = 0, okCount = 0, ngCount = 0, msSum = 0, frameCount = 0;
+
+// ---- Tracking / part indexing ----
+let trackPartCounter = 0;   // nomor part terakhir
+let trackCurrent = null;    // { id, verdict } selama part masih di frame
+let trackAbsent = 0;        // berapa frame berturut part tak terlihat
+// Butuh BEBERAPA frame kosong berturut sebelum part dianggap keluar → mencegah
+// part yang sama terukur/terhitung DUA KALI saat presence berkedip (conf rendah).
+let TRACK_EXIT_FRAMES = 2;
+let measureResult = null;   // hasil ukur penuh yang sedang ditampilkan (layer di-hold)
+let measureFrame = null;    // frame yang dipakai saat ukur (untuk foto ber-overlay)
+let measureTimer = null;    // timer sembunyikan layer ukuran
+let lastLite = null;        // hasil presence terakhir (untuk redraw presence box)
+let lastDataUrl = null;     // frame terakhir (untuk drawOverlay manual)
+let lastFull = null;        // hasil inspeksi PENUH terakhir (untuk Tuning GD&T)
+
+// Komposit frame + kotak/ukuran → dataURL (untuk foto tersimpan yang BER-OVERLAY).
+function renderAnnotatedDataUrl(frameDataUrl, result) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const cv = document.createElement('canvas');
+            cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+            const ctx = cv.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            drawBoxes(ctx, result, cv.width);
+            resolve(cv.toDataURL('image/jpeg', 0.9));
+        };
+        img.onerror = () => resolve(frameDataUrl);
+        img.src = frameDataUrl;
+    });
+}
+function trackMode() { const el = document.getElementById('trackToggle'); return el ? el.checked : false; }
+// Presence = apakah ada part di frame (dari step ber-add-on Presence Check).
+function presencePresent(result) {
+    for (const s of result.steps || []) {
+        if ((s.checks || []).some(c => c.addon === 'Presence Check')) return (s.detections || []).length > 0;
+        if (s.category === 'Positioning') return (s.detections || []).length > 0;   // presence sbg Positioning
+    }
+    return (result.steps || []).some(s => (s.detections || []).length > 0);
+}
+function updatePartInfo() {
+    const el = document.getElementById('partInfo');
+    if (!el) return;
+    if (trackCurrent) {
+        if (!trackCurrent.inspected) {
+            el.innerHTML = `Part <strong>#${trackCurrent.id}</strong> · <span class="muted">menunggu masuk zona…</span>`;
+        } else {
+            const col = trackCurrent.verdict === 'OK' ? 'var(--ok)' : 'var(--ng)';
+            el.innerHTML = `Part <strong>#${trackCurrent.id}</strong> · <strong style="color:${col}">${trackCurrent.verdict}</strong> (di frame)`;
+        }
+    } else {
+        el.innerHTML = `Part terakhir: <strong>#${trackPartCounter || '—'}</strong> · menunggu part berikutnya`;
+    }
+}
 let projectData = null;
 let filmstripItems = [];
 
 async function init() {
     projectData = await window.api.loadProject(projectName);
     renderPalette();
+    refreshArduinoStatus();
+    setInterval(refreshArduinoStatus, 5000);
 }
 
 function renderPalette(latestResult) {
@@ -96,18 +169,33 @@ function renderPalette(latestResult) {
     }
     palette.innerHTML = CATEGORIES.map(cat => {
         const catSteps = (projectData.workflow.steps || []).filter(s => s.category === cat);
+        // Status ON/OFF berdasarkan eksekusi siklus TERAKHIR:
+        //  ON  = ada step kategori ini yang benar-benar jalan (tidak di-skip)
+        //  OFF = step-nya di-skip (mis. Inspection dilewati saat tracking/light)
+        //  —   = belum ada hasil / kategori kosong
+        const rSteps = catSteps.map(s => stepMap[s.stepIndex]).filter(Boolean);
+        let badge = '<span style="font-size:10px;color:#64748b;font-weight:700">— IDLE</span>';
+        if (catSteps.length && rSteps.length) {
+            const ran = rSteps.some(r => !r.skipped);
+            badge = ran
+                ? '<span style="font-size:10px;color:var(--ok);font-weight:700">● ON</span>'
+                : '<span style="font-size:10px;color:#94a3b8;font-weight:700">○ OFF</span>';
+        } else if (!catSteps.length) {
+            badge = '<span style="font-size:10px;color:#64748b;font-weight:700">— —</span>';
+        }
         return `
             <div class="palette-cat">
-                <div class="palette-header">
+                <div class="palette-header" style="display:flex;align-items:center;gap:6px">
+                    <span style="min-width:44px;text-align:left">${badge}</span>
                     <div><span class="cat-icon"></span>${esc(cat)}</div>
                 </div>
                 <div class="palette-body">
                     ${catSteps.length ? catSteps.map(s => {
                         const r = stepMap[s.stepIndex];
-                        const cls = r ? (r.verdict === 'OK' ? 'ok' : 'ng') : '';
+                        const cls = r ? (r.skipped ? '' : (r.verdict === 'OK' ? 'ok' : 'ng')) : '';
                         return `<div class="palette-step">
                             <span class="step-num">${s.stepIndex}</span>
-                            <span>${esc(s.modelName || s.label || s.tool || s.category)}</span>
+                            <span>${esc(s.modelName || s.label || s.tool || s.category)}${r && r.skipped ? ' <span class="muted" style="font-size:10px">(dilewati)</span>' : ''}</span>
                             <span class="verdict-dot ${cls}"></span>
                         </div>`;
                     }).join('') : '<div class="palette-empty">(kosong)</div>'}
@@ -148,11 +236,12 @@ function stopCam() {
 let live = false, liveTimer = null, busy = false, revertTimer = null;
 
 let fpsSamples = [];
-function liveMs() { return Math.max(50, parseInt(document.getElementById('liveIntervalMs').value) || 120); }
-function restartLive() {
+// Loop KONTINU: presence jalan terus tanpa jeda antar-siklus.
+async function liveLoop() {
     if (!live) return;
-    clearInterval(liveTimer);
-    liveTimer = setInterval(inspectFrame, liveMs());
+    await inspectFrame();
+    if (!live) return;
+    liveTimer = setTimeout(liveLoop, 0);
 }
 function updateFps(cycleMs, result) {
     fpsSamples.push(cycleMs); if (fpsSamples.length > 8) fpsSamples.shift();
@@ -183,15 +272,25 @@ async function inspectFrame(forceFull) {
         return;
     }
     busy = true;
-    // Live: video TETAP jalan (kotak digambar di overlay transparan). Manual: drawOverlay yang sembunyikan video.
+    lastDataUrl = dataUrl;
     const conf = parseFloat(document.getElementById('liveConf').value);
+    const confVal = isNaN(conf) ? undefined : conf;
     const t0 = performance.now();
     try {
-        // Semua model (termasuk Socket Measurement) jalan saat Live maupun Capture.
-        // (Presence gate tetap aktif: kalau part tidak ada, model berat otomatis dilewati.)
-        const result = await window.api.inspect(projectName, dataUrl, { confidence: isNaN(conf) ? undefined : conf });
-        updateFps(performance.now() - t0, result);
-        renderResult(result, dataUrl);              // drawOverlay menampilkan kotak
+        if (trackMode() && !forceFull) {
+            // MODE TRACKING: fase-1 hanya presence (ringan, jalan terus mengikuti part).
+            // Socket Measurement dijalankan SEKALI per part di handleTracking (fase-2).
+            const lite = await window.api.inspect(projectName, dataUrl,
+                { confidence: confVal, light: true, noSignal: true, noSave: true });
+            updateFps(performance.now() - t0, lite);
+            await handleTracking(lite, dataUrl, confVal);
+        } else {
+            // Mode biasa / Capture manual: semua model jalan.
+            const result = await window.api.inspect(projectName, dataUrl,
+                { confidence: confVal, noSignal: trackMode() });
+            updateFps(performance.now() - t0, result);
+            renderResult(result, dataUrl);
+        }
     } catch (e) {
         if (!live) alert('Inspect error: ' + e.message);
         else console.warn('inspect:', e.message);
@@ -221,13 +320,12 @@ function toggleLive() {
         // video tetap tampil; snapView (frame beku) disembunyikan supaya tidak menutupi video live
         const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
         document.getElementById('cam').style.display = 'block';
-        liveTimer = setInterval(inspectFrame, liveMs());
-        inspectFrame();
+        liveLoop();                              // mulai loop kontinu (self-scheduling)
     } else {
         btn.textContent = '🔴 Live';
         btn.classList.remove('primary');
         document.getElementById('captureBtn').disabled = false;
-        clearInterval(liveTimer); liveTimer = null;
+        clearTimeout(liveTimer); liveTimer = null;
         const lo = document.getElementById('liveOverlay'); if (lo) lo.style.display = 'none';
         const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
         document.getElementById('cam').style.display = 'block';
@@ -323,6 +421,18 @@ function drawBoxes(ctx, result, cvWidth) {
             }
         });
     });
+
+    // Banner nomor part (mode tracking) di pojok kiri-atas.
+    if (typeof trackMode === 'function' && trackMode() && trackCurrent) {
+        const bf = Math.max(16, Math.round(cvWidth / 45));
+        ctx.font = `bold ${bf}px sans-serif`;
+        const t = `PART #${trackCurrent.id} · ${trackCurrent.verdict}`;
+        const w = ctx.measureText(t).width;
+        ctx.fillStyle = trackCurrent.verdict === 'OK' ? '#16a34a' : '#dc2626';
+        ctx.fillRect(6, 6, w + 16, bf + 10);
+        ctx.fillStyle = '#fff'; ctx.fillText(t, 14, 11);
+        ctx.font = `bold ${Math.max(12, Math.round(cvWidth / 85))}px sans-serif`;
+    }
 }
 
 // MANUAL: frame beku + kotak di snapView (video disembunyikan).
@@ -358,9 +468,21 @@ function drawLiveOverlay(result) {
 function renderResult(result, dataUrl) {
     // Update Total Status via layout.js helper (opsional — run.html tak selalu punya badge)
     if (typeof window.setTotalStatus === 'function') window.setTotalStatus(result.finalVerdict);
+    lastFull = result;   // hasil penuh (Capture manual) → bisa dipakai Tuning GD&T
     if (live) drawLiveOverlay(result); else drawOverlay(result, dataUrl);
 
-    // Update step rows
+    renderStepsAndSL(result);
+
+    // Mode NON-tracking: hitung tiap frame. (Mode tracking dihitung di handleTracking.)
+    frameCount++;
+    msSum += (result.totalMS || 0);
+    total++;
+    if (result.finalVerdict === 'OK') okCount++; else ngCount++;
+    updateCountersDOM();
+}
+
+// Tabel step + palette + notifikasi self-learning.
+function renderStepsAndSL(result) {
     document.getElementById('stepRows').innerHTML = result.steps.map(s => `
         <tr class="${s.verdict === 'OK' ? 'ok' : 'ng'}">
             <td>${s.stepIndex}</td>
@@ -369,11 +491,8 @@ function renderResult(result, dataUrl) {
             <td>${(s.confidence || 0).toFixed(2)}</td>
         </tr>
     `).join('') || '<tr><td colspan="4" class="muted">Belum ada hasil</td></tr>';
-
-    // Update palette with verdict dots
     renderPalette(result);
 
-    // Self-learning: tampilkan notifikasi bila hard sample terkumpul
     const sl = result.selfLearning;
     let slEl = document.getElementById('slNotice');
     if (!slEl) {
@@ -398,16 +517,297 @@ function renderResult(result, dataUrl) {
     } else if (sl && sl.reason === 'disabled') {
         slEl.textContent = '';
     }
+}
 
-    // Counters
-    total++;
-    if (result.finalVerdict === 'OK') okCount++; else ngCount++;
-    msSum += (result.totalMS || 0);
+function resetCounters() {
+    total = okCount = ngCount = msSum = frameCount = 0;
+    trackPartCounter = 0; trackCurrent = null; trackAbsent = 0; measureResult = null;
+    updateCountersDOM(); updatePartInfo();
+    const box = document.getElementById('eventLog'); if (box) box.innerHTML = '';
+}
+
+function updateCountersDOM() {
     document.getElementById('totalCount').textContent = total;
     document.getElementById('okCount').textContent = okCount;
     document.getElementById('ngCount').textContent = ngCount;
-    document.getElementById('avgCycle').textContent = total ? Math.round(msSum / total) : '-';
+    document.getElementById('avgCycle').textContent = frameCount ? Math.round(msSum / frameCount) : '-';
     document.getElementById('okRatio').textContent = total ? Math.round((okCount / total) * 100) + '%' : '-';
+}
+
+// ---- Event log (mesin state tracking) ----
+function logEvent(text, type) {
+    const box = document.getElementById('eventLog');
+    if (!box) return;
+    const colors = { in: '#3b82f6', ok: '#22c55e', ng: '#ef4444', sig: '#f59e0b', out: '#94a3b8' };
+    const t = new Date().toLocaleTimeString();
+    const row = document.createElement('div');
+    row.style.cssText = `border-left:3px solid ${colors[type] || '#64748b'};padding:2px 6px;margin-bottom:3px;font-size:11px`;
+    row.innerHTML = `<span class="muted" style="font-size:10px">${t}</span> ${text}`;
+    box.insertBefore(row, box.firstChild);
+    while (box.childNodes.length > 40) box.removeChild(box.lastChild);
+}
+
+// Kirim sinyal gate + log hasilnya (terkirim / gagal). 'O'=open, 'C'=close.
+async function sendGate(kind) {
+    const tok = kind === 'open' ? 'O' : 'C';
+    let r = {};
+    try { r = await window.api.arduinoGate(kind); } catch (e) { r = { ok: false, error: e.message }; }
+    if (r && r.ok) {
+        logEvent(`Arduino → sinyal <strong>'${tok}'</strong> ${kind === 'open' ? '(open gate)' : '(close gate)'} ✓ terkirim`, 'sig');
+    } else {
+        const why = (r && (r.reason || r.error)) || 'tidak tersambung';
+        logEvent(`Arduino '${tok}' <strong style="color:#ef4444">GAGAL</strong> — ${why}. Cek COM port di Settings & tutup Serial Monitor.`, 'ng');
+    }
+}
+
+// Cek koneksi Arduino/Wemos → tampilkan indikator.
+async function refreshArduinoStatus() {
+    const el = document.getElementById('ardStatus');
+    if (!el) return;
+    try {
+        const s = await window.api.arduinoStatus();
+        if (s && s.connected) el.innerHTML = `🟢 Tersambung (${esc(s.port || '?')} @ ${esc(String(s.baud || '?'))})`;
+        else el.innerHTML = `🔴 <strong>Tidak tersambung</strong> (${esc((s && s.port) || 'port belum diset')}) — tutup Serial Monitor lalu Reconnect`;
+    } catch (_) { el.textContent = '🔴 Status Arduino tak terbaca'; }
+}
+
+// Buka ulang port (setelah Serial Monitor Arduino IDE ditutup).
+async function reconnectArduino(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '🔌 menyambung…'; }
+    let r = {};
+    try { r = await window.api.arduinoReconnect(); } catch (e) { r = { ok: false, error: e.message }; }
+    await refreshArduinoStatus();
+    if (r && r.connected) logEvent(`Arduino tersambung (${esc(r.port || '?')} @ ${esc(String(r.baud || '?'))})`, 'ok');
+    else logEvent(`Reconnect GAGAL — ${esc((r && (r.error || 'port dipakai app lain? tutup Serial Monitor')) )}`, 'ng');
+    if (btn) { btn.disabled = false; btn.textContent = '🔌 Reconnect Arduino'; }
+}
+
+// ---- Alur tracking berbasis "DIAM" (settle):
+//   presence → tandai Part #N (tetap #N walau bergerak/berkedip)
+//   → part BERHENTI bergerak (stabil N frame) → inspeksi 1× → open gate
+//   → part keluar frame (hilang lama) → close gate → part berikutnya.
+// Ini mencegah: (a) inspeksi saat part masih jatuh/bergerak,
+//   (b) nomor part naik terus (1-2-3) karena presence berkedip.
+const MOVE_THRESH = 28;   // gerak pusat kotak < ini (px) = dianggap DIAM
+
+function boxCenterMove(a, b) {
+    if (!a || !b) return 9999;
+    const ax = (a.x1 + a.x2) / 2, ay = (a.y1 + a.y2) / 2;
+    const bx = (b.x1 + b.x2) / 2, by = (b.y1 + b.y2) / 2;
+    return Math.hypot(ax - bx, ay - by);
+}
+
+async function handleTracking(lite, dataUrl, confVal) {
+    renderStepsAndSL(lite);
+    frameCount++; msSum += (lite.totalMS || 0);
+    lastLite = lite;
+    const present = presencePresent(lite);
+    const box = present ? presenceBox(lite) : null;
+    const exitN = Math.max(1, parseInt(document.getElementById('exitFrames').value) || 2);
+    const settleN = Math.max(1, parseInt((document.getElementById('settleFrames') || {}).value) || 3);
+
+    if (present && box) {
+        trackAbsent = 0;
+        if (!measureResult) drawTracking(lite);        // presence box mengikuti part
+        if (!trackCurrent) {
+            // PART BARU — beri nomor sekali, mulai pantau gerak.
+            trackPartCounter++;
+            trackCurrent = { id: trackPartCounter, verdict: '…', inspected: false, box, stable: 0 };
+            logEvent(`Object Detector: <strong>presence</strong> → tandai <strong>Part #${trackPartCounter}</strong> (menunggu berhenti)`, 'in');
+            updatePartInfo();
+        } else {
+            // PART SAMA (lanjutan) — cek apakah sudah diam.
+            const moved = boxCenterMove(trackCurrent.box, box);
+            trackCurrent.box = box;
+            if (moved > MOVE_THRESH) trackCurrent.stable = 0;   // masih bergerak/jatuh
+            else trackCurrent.stable++;                          // diam bertambah
+        }
+        // Inspeksi SEKALI, hanya setelah part DIAM (stabil settleN frame).
+        if (trackCurrent && !trackCurrent.inspected && trackCurrent.stable >= settleN) {
+            trackCurrent.inspected = true;
+            await inspectPart(dataUrl, confVal);
+        }
+    } else if (trackCurrent) {
+        trackAbsent++;
+        if (trackCurrent.inspected) {
+            if (trackAbsent >= exitN) {               // part sudah diperiksa & benar-benar keluar → close
+                logEvent(`Object Detector: presence hilang → <strong>Part #${trackCurrent.id}</strong> keluar frame`, 'out');
+                sendGate('close');
+                trackCurrent = null; measureResult = null;
+                drawTracking(lite);
+            }
+        } else if (trackAbsent >= exitN * 5) {        // belum diinspeksi → tahan blink; lepas hanya bila hilang lama
+            trackCurrent = null; measureResult = null;
+            drawTracking(lite);
+        }
+    } else {
+        drawTracking(lite);
+    }
+    updatePartInfo();
+    updateCountersDOM();
+}
+
+// Inspeksi penuh satu part: ukur → gambar → foto(NG) → open gate → Inspection OFF.
+async function inspectPart(dataUrl, confVal) {
+    logEvent(`Part #${trackCurrent.id} <strong>berhenti</strong> → inspeksi`, 'in');
+    const mframe = grabDataUrl() || dataUrl;
+    let full = lastLite || { steps: [], finalVerdict: 'OK' };
+    try { full = await window.api.inspect(projectName, mframe, { confidence: confVal, light: false, noSignal: true, noSave: true }); }
+    catch (_) { }
+    const verdict = full.finalVerdict;
+    if (trackCurrent) trackCurrent.verdict = verdict;
+    total++; if (verdict === 'OK') okCount++; else ngCount++;
+    // Gambar layer ukuran (biar foto & tampilan benar).
+    measureResult = full; measureFrame = mframe; lastFull = full;
+    drawTracking(full);
+    renderStepsAndSL(full);
+    updatePartInfo(); updateCountersDOM();
+    logEvent(`Socket Measurement: verdict <strong>${verdict}</strong>`, verdict === 'OK' ? 'ok' : 'ng');
+    // Foto ber-overlay HANYA bila NG.
+    if (verdict === 'NG') {
+        try {
+            const annotated = await renderAnnotatedDataUrl(measureFrame, full);
+            const sr = await window.api.saveAnnotated(projectName, annotated, full);
+            logEvent(sr && sr.ok ? `Foto NG tersimpan (ber-overlay) ✓` : `Simpan foto NG gagal`, 'ng');
+        } catch (_) { }
+    } else {
+        logEvent(`OK — foto tidak disimpan`, 'ok');
+    }
+    // Langsung open gate (tanpa hold), lalu Inspection OFF.
+    await sendGate('open');
+    measureResult = null;
+    drawTracking(lastLite);
+    renderStepsAndSL(lastLite);
+}
+
+// Kotak presence terbesar (part utama) dari hasil — untuk pantau gerak/diam.
+function presenceBox(result) {
+    for (const s of result.steps || []) {
+        const isP = (s.category === 'Positioning') || (s.checks || []).some(c => c.addon === 'Presence Check');
+        if (isP) {
+            const dets = (s.detections || []).filter(d => d.x1 != null);
+            if (!dets.length) return null;
+            return dets.reduce((a, d) => ((d.x2 - d.x1) * (d.y2 - d.y1) > (a.x2 - a.x1) * (a.y2 - a.y1)) ? d : a, dets[0]);
+        }
+    }
+    return null;
+}
+
+// Gambar overlay tracking (presence box selalu; layer ukuran hanya bila result penuh diberikan).
+function drawTracking(result) {
+    if (live) drawLiveOverlay(result); else drawOverlay(result, lastDataUrl);
+}
+
+// ================= TUNING GD&T: mm/piksel dari objek yang ukuran aslinya diketahui =================
+let gdtTuneModel = null, gdtTuneDets = [], gdtTuneSel = -1;
+
+// Ukuran piksel per jenis (mirror pxOf di workflow.js).
+function detPx(d, key) {
+    if (d.measure && d.measure[key]) return d.measure[key];
+    const w = Math.abs(d.x2 - d.x1), h = Math.abs(d.y2 - d.y1);
+    return key === 'widthPx' ? Math.min(w, h) : key === 'heightPx' ? Math.max(w, h) : (w + h) / 2;
+}
+function gdtShapeOf(model, cls) {
+    const pc = model && model.addonConfig && model.addonConfig.gdt && model.addonConfig.gdt.perClass;
+    return (pc && pc[cls] && pc[cls].shape) || 'rect';
+}
+
+function openGdtTuning() {
+    const model = (projectData.models || []).find(m => (m.addons || []).includes('GD&T Measurement'));
+    if (!model) { alert('Tidak ada model Inspection ber-add-on GD&T Measurement.'); return; }
+    if (!lastFull) { alert('Belum ada hasil ukur. Jalankan Capture & Inspect / Live dulu sampai objek terukur, baru Tuning.'); return; }
+    const step = (lastFull.steps || []).find(s => s.modelName === model.name);
+    const dets = ((step && step.detections) || []).filter(d => d.x1 != null);
+    if (!dets.length) { alert('Tidak ada objek terdeteksi pada model GD&T di hasil terakhir.'); return; }
+    gdtTuneModel = model; gdtTuneDets = dets; gdtTuneSel = -1;
+
+    const rows = dets.map((d, i) => {
+        const cls = d.class_name || ('#' + d.class_id);
+        const shape = gdtShapeOf(model, cls);
+        const dim = shape === 'circle'
+            ? `Ø ${detPx(d, 'diameterPx').toFixed(0)} px`
+            : `${detPx(d, 'heightPx').toFixed(0)}×${detPx(d, 'widthPx').toFixed(0)} px`;
+        return `<label style="display:block;padding:4px 6px;border:1px solid var(--border);border-radius:4px;margin-bottom:4px;cursor:pointer">
+            <input type="radio" name="tuneDet" value="${i}" onchange="selectTuneDet(${i})">
+            <strong>${esc(cls)}</strong> <span class="muted">#${i + 1}</span> — ${dim}
+            <span class="muted" style="font-size:11px">(${shape === 'circle' ? 'lingkaran' : 'persegi'})</span>
+        </label>`;
+    }).join('');
+
+    const ov = document.createElement('div');
+    ov.id = 'gdtTuneOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:4000;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML = `
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:16px;max-width:480px;width:92%;max-height:86vh;overflow-y:auto">
+            <h3 style="margin:0 0 4px">🎯 Tuning GD&T — mm/piksel</h3>
+            <p class="muted" style="font-size:12px;margin:0 0 10px">Pilih SATU objek terdeteksi yang kamu tahu ukuran aslinya, isi ukuran asli (mm). mm/piksel dihitung otomatis dan berlaku untuk semua kelas.</p>
+            <div style="max-height:220px;overflow-y:auto;margin-bottom:8px">${rows}</div>
+            <div id="tuneInputs" class="muted" style="font-size:12px">Pilih objek dulu di atas.</div>
+            <div style="margin-top:12px;text-align:right">
+                <button class="btn small" type="button" onclick="closeGdtTuning()">Batal</button>
+                <button class="btn small primary" type="button" onclick="applyGdtTuning()">Hitung & Simpan mm/piksel</button>
+            </div>
+        </div>`;
+    ov.addEventListener('click', e => { if (e.target === ov) closeGdtTuning(); });
+    document.body.appendChild(ov);
+}
+
+function selectTuneDet(i) {
+    gdtTuneSel = i;
+    const d = gdtTuneDets[i];
+    const cls = d.class_name || ('#' + d.class_id);
+    const shape = gdtShapeOf(gdtTuneModel, cls);
+    const box = document.getElementById('tuneInputs');
+    if (shape === 'circle') {
+        box.innerHTML = `Diameter asli <strong>${esc(cls)}</strong> (mm):
+            <input type="number" id="tuneDia" step="0.01" style="width:90px" placeholder="mis. 4.5">
+            <span class="muted" style="font-size:11px"> (terukur ${detPx(d, 'diameterPx').toFixed(0)} px)</span>`;
+    } else {
+        box.innerHTML = `Ukuran asli <strong>${esc(cls)}</strong> (mm) — isi salah satu / keduanya:<br>
+            Panjang <input type="number" id="tuneL" step="0.01" style="width:80px" placeholder="mis. 20">
+            <span class="muted" style="font-size:11px">(${detPx(d, 'heightPx').toFixed(0)}px)</span>
+            &nbsp; Lebar <input type="number" id="tuneW" step="0.01" style="width:80px" placeholder="mis. 9">
+            <span class="muted" style="font-size:11px">(${detPx(d, 'widthPx').toFixed(0)}px)</span>`;
+    }
+}
+
+async function applyGdtTuning() {
+    if (gdtTuneSel < 0) { alert('Pilih objek dulu.'); return; }
+    const d = gdtTuneDets[gdtTuneSel];
+    const cls = d.class_name || ('#' + d.class_id);
+    const shape = gdtShapeOf(gdtTuneModel, cls);
+    let mmpp;
+    if (shape === 'circle') {
+        const real = parseFloat((document.getElementById('tuneDia') || {}).value);
+        const px = detPx(d, 'diameterPx');
+        if (!real || !px) { alert('Isi diameter asli (mm).'); return; }
+        mmpp = real / px;
+    } else {
+        const ratios = [];
+        const rl = parseFloat((document.getElementById('tuneL') || {}).value);
+        const rw = parseFloat((document.getElementById('tuneW') || {}).value);
+        if (rl) ratios.push(rl / detPx(d, 'heightPx'));
+        if (rw) ratios.push(rw / detPx(d, 'widthPx'));
+        if (!ratios.length) { alert('Isi panjang atau lebar asli (mm).'); return; }
+        mmpp = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+    }
+    if (!isFinite(mmpp) || mmpp <= 0) { alert('Perhitungan tidak valid (piksel objek 0?).'); return; }
+    const addonConfig = gdtTuneModel.addonConfig || {};
+    addonConfig.gdt = addonConfig.gdt || {};
+    addonConfig.gdt.mmPerPixel = Number(mmpp.toFixed(6));
+    try {
+        await window.api.updateModel(projectName, gdtTuneModel.name, { addonConfig });
+        gdtTuneModel.addonConfig = addonConfig;
+        logEvent(`mm/piksel di-tuning = <strong>${mmpp.toFixed(5)}</strong> (dari ${esc(cls)})`, 'ok');
+        closeGdtTuning();
+        alert(`✓ mm/piksel disetel ke ${mmpp.toFixed(5)}.\nSemua ukuran GD&T sekarang memakai nilai ini.`);
+    } catch (e) { alert('Gagal simpan: ' + e.message); }
+}
+
+function closeGdtTuning() {
+    const ov = document.getElementById('gdtTuneOverlay');
+    if (ov) ov.remove();
+    gdtTuneModel = null; gdtTuneDets = []; gdtTuneSel = -1;
 }
 
 init();
