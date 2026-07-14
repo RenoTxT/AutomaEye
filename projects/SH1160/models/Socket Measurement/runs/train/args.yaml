@@ -1,6 +1,6 @@
 task: segment
 mode: train
-model: yolo11n-seg.pt
+model: C:\Users\LAB-AI-05\Desktop\TA36\AutomaEye\projects\SH1160\models\Socket Measurement\runs\train\weights\last.pt
 data: C:\Users\LAB-AI-05\Desktop\TA36\AutomaEye\projects\SH1160\models\Socket Measurement\dataset\data.yaml
 epochs: 100
 time: null
@@ -11,7 +11,7 @@ save: true
 save_period: -1
 cache: false
 device: null
-workers: 8
+workers: 0
 project: C:\Users\LAB-AI-05\Desktop\TA36\AutomaEye\projects\SH1160\models\Socket Measurement\runs
 name: train
 exist_ok: true
@@ -24,7 +24,7 @@ single_cls: false
 rect: false
 cos_lr: false
 close_mosaic: 10
-resume: false
+resume: C:\Users\LAB-AI-05\Desktop\TA36\AutomaEye\projects\SH1160\models\Socket Measurement\runs\train\weights\last.pt
 amp: true
 fraction: 1.0
 profile: false
@@ -76,7 +76,7 @@ momentum: 0.937
 weight_decay: 0.0005
 warmup_epochs: 3.0
 warmup_momentum: 0.8
-warmup_bias_lr: 0.1
+warmup_bias_lr: 0.0
 box: 7.5
 cls: 0.5
 dfl: 1.5
