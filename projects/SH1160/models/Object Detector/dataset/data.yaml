@@ -1,4 +1,4 @@
-path: C:/Users/Paul/Documents/TA 36/App/AutomaEye/projects/SH1160/models/Object Detector/dataset
+path: C:/Users/MHS/Desktop/TA 36/AutomaEye/projects/SH1160/models/Object Detector/dataset
 train: images/train
 val: images/val
 test: images/test
