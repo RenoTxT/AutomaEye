@@ -1252,13 +1252,25 @@ function renderAddonRules() {
                 <input type="number" id="gdt_${kind}_T_${i}" step="0.01" placeholder="tol±" value="${sp.toleranceMM != null ? sp.toleranceMM : ''}" style="width:70px"></div>`;
         };
         const cls_arr = currentModel.classes || [];
-        const classRows = cls_arr.map((cls, i) =>
-            `<div style="margin:6px 0;padding:6px 8px;background:var(--panel-alt);border-radius:4px">
-                <strong>${esc(cls)}</strong> <span class="muted" style="font-size:11px">(isi hanya yang perlu; kosong = tak diukur)</span>
-                ${mrow(i, 'dia', 'Diameter (bulat)')}
-                ${mrow(i, 'long', 'Sisi panjang')}
-                ${mrow(i, 'short', 'Sisi pendek')}
-            </div>`).join('');
+        const classRows = cls_arr.map((cls, i) => {
+            const shape = (pc[cls] && pc[cls].shape) || 'rect';
+            return `<div style="margin:6px 0;padding:6px 8px;background:var(--panel-alt);border-radius:4px">
+                <strong>${esc(cls)}</strong>
+                <label style="font-size:11px;margin-left:8px">Bentuk
+                    <select id="gdt_shape_${i}" onchange="toggleShapeRows(${i})">
+                        <option value="circle" ${shape === 'circle' ? 'selected' : ''}>Lingkaran (Ø diameter)</option>
+                        <option value="rect" ${shape === 'rect' ? 'selected' : ''}>Persegi (panjang × lebar)</option>
+                    </select></label>
+                <span class="muted" style="font-size:11px"> — kosongkan nominal = tak dinilai (hanya tampil ukuran)</span>
+                <div id="gdt_circle_${i}" style="${shape === 'circle' ? '' : 'display:none'}">
+                    ${mrow(i, 'dia', 'Diameter (Ø)')}
+                </div>
+                <div id="gdt_rect_${i}" style="${shape === 'rect' ? '' : 'display:none'}">
+                    ${mrow(i, 'long', 'Sisi panjang')}
+                    ${mrow(i, 'short', 'Sisi pendek')}
+                </div>
+            </div>`;
+        }).join('');
         blocks.push(`<p style="margin:10px 0 2px"><strong>GD&amp;T Measurement</strong> — ukur dimensi <strong>per kelas</strong>.</p>
             <div style="margin:0 0 8px 4px;border-left:2px solid var(--border);padding-left:12px">
                 <p class="muted" style="font-size:11px;margin:2px 0 6px">Kalibrasi mm/piksel (berlaku semua kelas). Termudah pakai kamera + grid.</p>
@@ -1295,6 +1307,16 @@ function calcMmPerPx() {
 
 // ==== Kalibrasi via Kamera: live view + grid ruler piksel + ukur tarik-garis ====
 let _calib = null;
+// Tampilkan baris ukur sesuai bentuk kelas: lingkaran=diameter, persegi=panjang+lebar.
+function toggleShapeRows(i) {
+    const sh = document.getElementById('gdt_shape_' + i);
+    if (!sh) return;
+    const circle = document.getElementById('gdt_circle_' + i);
+    const rect = document.getElementById('gdt_rect_' + i);
+    if (circle) circle.style.display = sh.value === 'circle' ? '' : 'none';
+    if (rect) rect.style.display = sh.value === 'rect' ? '' : 'none';
+}
+
 function openGdtCalib() {
     closeGdtCalib();
     const overlay = document.createElement('div');
@@ -1434,16 +1456,20 @@ async function saveAddonRules() {
     if (addons.includes('GD&T Measurement') && el('gdtMmPerPx')) {
         const gdt = { mmPerPixel: num('gdtMmPerPx'), perClass: {} };
         (currentModel.classes || []).forEach((cls, i) => {
-            const spec = {};
-            ['dia', 'long', 'short'].forEach(kind => {
+            const shEl = el(`gdt_shape_${i}`);
+            const shape = shEl ? shEl.value : 'rect';
+            const spec = { shape };
+            // Kelas lingkaran → hanya diameter; persegi → panjang & lebar.
+            const kinds = shape === 'circle' ? ['dia'] : ['long', 'short'];
+            kinds.forEach(kind => {
                 const nEl = el(`gdt_${kind}_N_${i}`);
                 if (!nEl) return;
                 const n = num(`gdt_${kind}_N_${i}`);
-                if (n == null) return;                       // nominal kosong → tak diukur
+                if (n == null) return;                       // nominal kosong → tak dinilai
                 const t = num(`gdt_${kind}_T_${i}`);
                 spec[kind] = { nominalMM: n, toleranceMM: t != null ? t : 0.1 };
             });
-            if (Object.keys(spec).length) gdt.perClass[cls] = spec;
+            gdt.perClass[cls] = spec;                         // simpan shape walau nominal kosong
         });
         addonConfig.gdt = gdt;
     }

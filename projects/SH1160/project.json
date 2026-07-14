@@ -2,7 +2,7 @@
   "name": "SH1160",
   "description": "AI detection untuk Socket Holder 1160",
   "createdAt": "2026-07-11T03:07:48.055Z",
-  "updatedAt": "2026-07-13T16:29:15.793Z",
+  "updatedAt": "2026-07-13T14:30:47.893Z",
   "models": [
     {
       "name": "Object Detector",
@@ -40,8 +40,37 @@
       ],
       "addonConfig": {
         "gdt": {
-          "mmPerPixel": 0.10765,
-          "perClass": {}
+          "mmPerPixel": 0.098151,
+          "perClass": {
+            "lubang_kecil": {
+              "shape": "circle",
+              "dia": {
+                "nominalMM": 2,
+                "toleranceMM": 0.3
+              }
+            },
+            "lubang_besar": {
+              "shape": "circle",
+              "dia": {
+                "nominalMM": 2.5,
+                "toleranceMM": 0.3
+              }
+            },
+            "tinggi_tab": {
+              "shape": "rect"
+            },
+            "jarak_tab": {
+              "shape": "rect",
+              "long": {
+                "nominalMM": 19,
+                "toleranceMM": 0.3
+              },
+              "short": {
+                "nominalMM": 8,
+                "toleranceMM": 0.3
+              }
+            }
+          }
         }
       },
       "classes": [
@@ -63,7 +92,7 @@
       },
       "trained": true,
       "createdAt": "2026-07-12T08:31:14.405Z",
-      "updatedAt": "2026-07-13T04:17:54.275Z",
+      "updatedAt": "2026-07-13T14:30:47.893Z",
       "lastMAP": 0.995,
       "lastPrecision": 0.992,
       "lastRecall": 0.9976,
@@ -85,7 +114,7 @@
       },
       {
         "modelName": "Object Detector",
-        "category": "Inspection",
+        "category": "Positioning",
         "continueOn": "always",
         "stepIndex": 2
       },
