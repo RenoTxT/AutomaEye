@@ -175,6 +175,9 @@
                         <p class="muted" style="font-size:11px; margin:4px 0 0">Default: hanya <em>train</em> (praktik ML standar). Centang Val/Test hanya bila diminta (mis. syarat pembimbing) — tiap split di-augment ke foldernya sendiri, tidak dicampur.</p>
                     </div>
 
+                    <label style="display:block; margin-top:10px"><input type="checkbox" id="augClean" checked> Regenerasi bersih (hapus augmentasi lama dulu)</label>
+                    <p class="muted" style="font-size:11px; margin:2px 0 0">Aktif = set augmentasi baru (aug lama seperti rotasi dibuang). Matikan hanya bila ingin menumpuk aug lama.</p>
+
                     <button class="btn primary" onclick="generateAug()" id="genBtn" style="margin-top:10px">Generate</button>
                     <div class="progress-bar" id="augBar" style="display:none"><div class="progress-fill" id="augFill" style="width:0"></div></div>
                     <p class="muted" id="augStatus" style="margin-top:8px"></p>
@@ -657,6 +660,7 @@ async function generateAug() {
             noiseSigma: noise ? parseFloat(document.getElementById('noiseBox').value) : 0,
             multiplier: parseInt(document.getElementById('augMult').value) || 2,
             splits,
+            clean: !!(document.getElementById('augClean') && document.getElementById('augClean').checked),
         });
         fill.style.width = '100%';
         document.getElementById('augStatus').textContent =

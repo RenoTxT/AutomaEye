@@ -151,10 +151,30 @@ def main():
     ap.add_argument("--noise-sigma", type=float, default=8.0)
     ap.add_argument("--splits", default="train",
                     help="split yang di-augment, pisah koma. mis: train  atau  train,val,test")
+    ap.add_argument("--clean", action="store_true",
+                    help="hapus augmentasi lama (.aug) di split terkait sebelum generate baru")
     args = ap.parse_args()
 
     base = Path(args.dir)
     splits = [s.strip() for s in (args.splits or "train").split(",") if s.strip()]
+
+    # Regenerasi bersih: hapus augmentasi lama (.aug) di split terkait dulu,
+    # supaya aug lama (mis. rotasi) tidak ikut saat generate set baru.
+    if args.clean:
+        removed = 0
+        for split in splits:
+            for kind in ("images", "labels"):
+                d = base / kind / split
+                if not d.exists():
+                    continue
+                for f in list(d.iterdir()):
+                    if ".aug" in f.name:
+                        try:
+                            f.unlink()
+                            removed += 1
+                        except Exception:
+                            pass
+        print(f"[i] Regenerasi bersih: {removed} file augmentasi lama dihapus.", flush=True)
 
     enabled = []
     if args.rotate:
