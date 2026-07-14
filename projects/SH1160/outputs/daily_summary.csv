@@ -496,3 +496,5 @@ date,seq,timestamp,final_verdict,total_ms,steps
 2026-07-13,405,2026-07-13T16:51:03.970Z,NG,135.0,Kamera / Webcam:OK(0.00);Object Detector:NG(0.00)
 2026-07-13,406,2026-07-13T16:51:12.506Z,NG,303.0,Kamera / Webcam:OK(0.00);Object Detector:OK(0.65);Socket Measurement:NG(0.00)
 2026-07-13,407,2026-07-13T16:51:21.731Z,NG,692.0,Kamera / Webcam:OK(0.00);Object Detector:OK(0.54);Socket Measurement:NG(0.78)
+2026-07-14,001,2026-07-14T02:20:17.468Z,NG,511.0,Kamera / Webcam:OK(0.00);Object Detector:OK(0.75);Socket Measurement:NG(0.53)
+2026-07-14,002,2026-07-14T02:21:00.055Z,NG,343.0,Kamera / Webcam:OK(0.00);Object Detector:OK(0.60);Socket Measurement:NG(0.50)

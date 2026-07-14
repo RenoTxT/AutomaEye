@@ -44,8 +44,11 @@
         <div class="results-panel" style="overflow-y:auto">
             <div class="results-section">
                 <h4>Live Settings</h4>
-                <label style="display:block;font-size:12px;margin-bottom:4px">Confidence
+                <label style="display:block;font-size:12px;margin-bottom:4px">Confidence (inspeksi/ukur)
                     <input type="number" id="liveConf" value="0.5" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
+                <label style="display:block;font-size:12px;margin-bottom:4px">Confidence presence (deteksi part)
+                    <input type="number" id="presenceConf" value="0.2" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
+                <p class="muted" style="font-size:10px;margin:0 0 4px">Lebih rendah = part terdeteksi lebih cepat walau masih bergerak/blur.</p>
                 <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="labelToggle" checked> Label model+addon</label>
                 <label style="display:block;font-size:12px;margin-bottom:4px"><input type="checkbox" id="trackToggle" checked> Tracking (1 nomor & 1 sinyal per part)</label>
                 <label style="display:block;font-size:12px;margin-bottom:4px">Diam N frame utk inspeksi
@@ -280,8 +283,11 @@ async function inspectFrame(forceFull) {
         if (trackMode() && !forceFull) {
             // MODE TRACKING: fase-1 hanya presence (ringan, jalan terus mengikuti part).
             // Socket Measurement dijalankan SEKALI per part di handleTracking (fase-2).
+            // Presence pakai confidence lebih rendah → part bergerak/blur terdeteksi lebih awal.
+            const pc = parseFloat(document.getElementById('presenceConf').value);
+            const presConf = isNaN(pc) ? confVal : pc;
             const lite = await window.api.inspect(projectName, dataUrl,
-                { confidence: confVal, light: true, noSignal: true, noSave: true });
+                { confidence: presConf, light: true, noSignal: true, noSave: true });
             updateFps(performance.now() - t0, lite);
             await handleTracking(lite, dataUrl, confVal);
         } else {
