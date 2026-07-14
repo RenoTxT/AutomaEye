@@ -45,7 +45,7 @@
             <div class="results-section">
                 <h4>Live Settings</h4>
                 <label style="display:block;font-size:12px;margin-bottom:4px">Confidence (inspeksi/ukur)
-                    <input type="number" id="liveConf" value="0.5" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
+                    <input type="number" id="liveConf" value="0.25" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
                 <label style="display:block;font-size:12px;margin-bottom:4px">Confidence presence (deteksi part)
                     <input type="number" id="presenceConf" value="0.2" min="0.05" max="0.95" step="0.05" style="width:90px"></label>
                 <p class="muted" style="font-size:10px;margin:0 0 4px">Lebih rendah = part terdeteksi lebih cepat walau masih bergerak/blur.</p>
@@ -668,7 +668,9 @@ async function inspectPart(dataUrl, confVal) {
     drawTracking(full);
     renderStepsAndSL(full);
     updatePartInfo(); updateCountersDOM();
-    logEvent(`Socket Measurement: verdict <strong>${verdict}</strong>`, verdict === 'OK' ? 'ok' : 'ng');
+    const inspStep = (full.steps || []).find(s => s.category === 'Inspection' && !s.skipped);
+    const reason = inspStep && inspStep.reason ? ` — ${esc(inspStep.reason)}` : '';
+    logEvent(`Socket Measurement: verdict <strong>${verdict}</strong>${reason}`, verdict === 'OK' ? 'ok' : 'ng');
     // Foto ber-overlay HANYA bila NG.
     if (verdict === 'NG') {
         try {
