@@ -1,6 +1,6 @@
 task: detect
 mode: train
-model: yolo11n.pt
+model: C:\Users\MHS\Desktop\TA 36\AutomaEye\projects\SH1160\models\Presence Detector\weights\best.pt
 data: C:\Users\MHS\Desktop\TA 36\AutomaEye\projects\SH1160\models\Presence Detector\dataset\data.yaml
 epochs: 100
 time: null
