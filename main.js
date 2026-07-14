@@ -380,10 +380,20 @@ ipcMain.handle('annotation:check', async () => {
 
 // ---- Training ----
 ipcMain.handle('training:start', async (event, { project, model, resume }) => {
+    let lastMetrics = {};
     return inference.startTraining(cfg, projectsRoot, project, model, (progress) => {
+        if (progress.finalMAP != null) lastMetrics = { mAP: progress.finalMAP, P: progress.finalP, R: progress.finalR };
+        // Training sukses → snapshot jadi VERSI baru (v1, v2, ...).
+        if (progress.done && progress.exitCode === 0) {
+            try { progress.version = projects.snapshotVersion(projectsRoot, project, model, lastMetrics); }
+            catch (e) { console.warn('[version] snapshot gagal:', e.message); }
+        }
         event.sender.send('training:progress', { project, model, progress });
     }, { resume: !!resume });
 });
+// Set versi aktif model (default kalau workflow tak pilih versi).
+ipcMain.handle('models:setActiveVersion', (_e, { project, model, versionId }) =>
+    projects.setActiveVersion(projectsRoot, project, model, versionId));
 ipcMain.handle('training:cancel', () => inference.cancelTraining());
 ipcMain.handle('training:loadHistory', (_e, { project, model }) =>
     inference.loadTrainHistory(projectsRoot, project, model));

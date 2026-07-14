@@ -115,8 +115,17 @@ function renderProps() {
         head = `<h3>Step [${selectedIdx + 1}] — ${esc(s.modelName)}</h3>
             <p class="muted">Type: <strong>${m ? esc(m.type) : '?'}</strong> · Status: ${trained}<br>
             ${s.category === 'Positioning' ? 'Peran: mengunci lokasi part (bukan menilai).' : 'Peran: menilai OK/NG lewat add-on.'}</p>`;
+        // Pilih VERSI model (v1, v2, …) untuk step ini. Kosong = pakai versi aktif.
+        let verHtml = '';
+        if (m && m.versions && m.versions.length) {
+            verHtml = `<label style="display:block;margin-bottom:6px">Versi model
+                <select onchange="updateStep('version', this.value ? (parseInt(this.value) || null) : null)">
+                    <option value="" ${!s.version ? 'selected' : ''}>Aktif (v${m.activeVersion || '?'})</option>
+                    ${m.versions.slice().reverse().map(v => `<option value="${v.id}" ${s.version === v.id ? 'selected' : ''}>v${v.id}${v.id === m.activeVersion ? ' · aktif' : ''}</option>`).join('')}
+                </select></label>`;
+        }
         const pass = (s.config && s.config.passOnNoDetect) ? 'checked' : '';
-        configHtml = `<label style="display:block;margin-bottom:6px"><input type="checkbox" ${pass} onchange="updateStepConfig('passOnNoDetect', this.checked)"> Anggap <strong>OK</strong> bila tidak ada objek terdeteksi (lanjut ke step berikutnya)</label>`;
+        configHtml = verHtml + `<label style="display:block;margin-bottom:6px"><input type="checkbox" ${pass} onchange="updateStepConfig('passOnNoDetect', this.checked)"> Anggap <strong>OK</strong> bila tidak ada objek terdeteksi (lanjut ke step berikutnya)</label>`;
     } else {
         head = `<h3>Step [${selectedIdx + 1}] — ${esc(s.label || s.tool)}</h3>
             <p class="muted">Tool ${esc(s.category)}.</p>`;

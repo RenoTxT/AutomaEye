@@ -1,0 +1,405 @@
+{
+  "seq": 77,
+  "timestamp": "2026-07-14T13:36:18.606Z",
+  "finalVerdict": "NG",
+  "totalMS": 315,
+  "steps": [
+    {
+      "stepIndex": 1,
+      "category": "Capture",
+      "label": "Kamera / Webcam",
+      "verdict": "OK",
+      "confidence": 0,
+      "reason": "Sumber: kamera · gambar 71KB diterima",
+      "stepMS": 0
+    },
+    {
+      "stepIndex": 2,
+      "category": "Positioning",
+      "modelName": "Presence Detector",
+      "label": "Presence Detector",
+      "verdict": "OK",
+      "confidence": 0.9122071862220764,
+      "detections": [
+        {
+          "x1": 4.25634765625,
+          "y1": 515.0487060546875,
+          "x2": 1269.216552734375,
+          "y2": 720,
+          "confidence": 0.9186618328094482,
+          "class_id": 0,
+          "class_name": "object"
+        },
+        {
+          "x1": 8.300048828125,
+          "y1": 201.93553161621094,
+          "x2": 1241.4619140625,
+          "y2": 512.659423828125,
+          "confidence": 0.9122071862220764,
+          "class_id": 0,
+          "class_name": "object"
+        }
+      ],
+      "reason": "Part terkunci di (625, 357)",
+      "stepMS": 134
+    },
+    {
+      "stepIndex": 3,
+      "category": "Inspection",
+      "modelName": "Measurement",
+      "label": "Measurement",
+      "verdict": "NG",
+      "confidence": 0.8129391074180603,
+      "detections": [
+        {
+          "x1": 163.45994567871094,
+          "y1": 234.19110107421875,
+          "x2": 245.62452697753906,
+          "y2": 422.98712158203125,
+          "confidence": 0.9526670575141907,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 204.63645935058594,
+            "widthPx": 86,
+            "heightPx": 190,
+            "areaPx": 10142
+          },
+          "gdt": [
+            {
+              "text": "Ø20.07",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 487.6424560546875,
+          "y1": 227.55667114257812,
+          "x2": 571.44580078125,
+          "y2": 418.9309387207031,
+          "confidence": 0.9459710121154785,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 215.08157348632812,
+            "widthPx": 94,
+            "heightPx": 198,
+            "areaPx": 11588
+          },
+          "gdt": [
+            {
+              "text": "Ø21.10",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 1019.6798095703125,
+          "y1": 221.55125427246094,
+          "x2": 1100.3363037109375,
+          "y2": 410.9244384765625,
+          "confidence": 0.9426743984222412,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 215.8705291748047,
+            "widthPx": 86,
+            "heightPx": 198,
+            "areaPx": 10248
+          },
+          "gdt": [
+            {
+              "text": "Ø21.17",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 693.5181884765625,
+          "y1": 223.26820373535156,
+          "x2": 777.1270751953125,
+          "y2": 415.6256103515625,
+          "confidence": 0.9360100030899048,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 219.1804962158203,
+            "widthPx": 94,
+            "heightPx": 198,
+            "areaPx": 10800
+          },
+          "gdt": [
+            {
+              "text": "Ø21.50",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 817.27783203125,
+          "y1": 222.33444213867188,
+          "x2": 901.441650390625,
+          "y2": 414.0586853027344,
+          "confidence": 0.9358555674552917,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 215.8705291748047,
+            "widthPx": 86,
+            "heightPx": 198,
+            "areaPx": 10726
+          },
+          "gdt": [
+            {
+              "text": "Ø21.17",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 47.04983139038086,
+          "y1": 235.24932861328125,
+          "x2": 126.23251342773438,
+          "y2": 425.0262451171875,
+          "confidence": 0.9264380931854248,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 206.7367401123047,
+            "widthPx": 86,
+            "heightPx": 188,
+            "areaPx": 9658
+          },
+          "gdt": [
+            {
+              "text": "Ø20.28",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 1139.2330322265625,
+          "y1": 226.33982849121094,
+          "x2": 1216.4796142578125,
+          "y2": 411.1375732421875,
+          "confidence": 0.9155945777893066,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 203.18484497070312,
+            "widthPx": 76,
+            "heightPx": 190,
+            "areaPx": 9804
+          },
+          "gdt": [
+            {
+              "text": "Ø19.93",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 363.62371826171875,
+          "y1": 228.64739990234375,
+          "x2": 446.80499267578125,
+          "y2": 418.25628662109375,
+          "confidence": 0.9132739901542664,
+          "class_id": 0,
+          "class_name": "holebig",
+          "measure": {
+            "diameterPx": 215.8705291748047,
+            "widthPx": 85.99998474121094,
+            "heightPx": 197.99996948242188,
+            "areaPx": 10286
+          },
+          "gdt": [
+            {
+              "text": "Ø21.17",
+              "ok": false,
+              "kind": "dia"
+            }
+          ]
+        },
+        {
+          "x1": 587.20556640625,
+          "y1": 444.65765380859375,
+          "x2": 611.654541015625,
+          "y2": 468.96893310546875,
+          "confidence": 0.8963062167167664,
+          "class_id": 1,
+          "class_name": "box",
+          "measure": {
+            "diameterPx": 42.426605224609375,
+            "widthPx": 30,
+            "heightPx": 30,
+            "areaPx": 730
+          },
+          "gdt": [
+            {
+              "text": "2.94",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "2.94",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 915.3150634765625,
+          "y1": 439.390869140625,
+          "x2": 939.2283935546875,
+          "y2": 464.5628662109375,
+          "confidence": 0.8854165077209473,
+          "class_id": 1,
+          "class_name": "box",
+          "measure": {
+            "diameterPx": 36.53352355957031,
+            "widthPx": 28,
+            "heightPx": 30,
+            "areaPx": 568
+          },
+          "gdt": [
+            {
+              "text": "2.94",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "2.75",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 657.870849609375,
+          "y1": 442.259521484375,
+          "x2": 682.094482421875,
+          "y2": 468.02960205078125,
+          "confidence": 0.8812074065208435,
+          "class_id": 1,
+          "class_name": "box",
+          "measure": {
+            "diameterPx": 37.20235061645508,
+            "widthPx": 22,
+            "heightPx": 30,
+            "areaPx": 538
+          },
+          "gdt": [
+            {
+              "text": "2.94",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "2.16",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 260.7476806640625,
+          "y1": 447.890380859375,
+          "x2": 284.822265625,
+          "y2": 473.48480224609375,
+          "confidence": 0.8650420904159546,
+          "class_id": 1,
+          "class_name": "box",
+          "measure": {
+            "diameterPx": 41.036766052246094,
+            "widthPx": 28,
+            "heightPx": 30,
+            "areaPx": 764
+          },
+          "gdt": [
+            {
+              "text": "2.94",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "2.75",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 328.81500244140625,
+          "y1": 446.2779541015625,
+          "x2": 353.01422119140625,
+          "y2": 472.92913818359375,
+          "confidence": 0.8558809161186218,
+          "class_id": 1,
+          "class_name": "box",
+          "measure": {
+            "diameterPx": 33.28683090209961,
+            "widthPx": 20,
+            "heightPx": 28,
+            "areaPx": 510
+          },
+          "gdt": [
+            {
+              "text": "2.75",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "1.96",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        },
+        {
+          "x1": 983.389892578125,
+          "y1": 437.4716796875,
+          "x2": 1007.78271484375,
+          "y2": 463.6405029296875,
+          "confidence": 0.8129391074180603,
+          "class_id": 1,
+          "class_name": "box",
+          "measure": {
+            "diameterPx": 42.426605224609375,
+            "widthPx": 30,
+            "heightPx": 30,
+            "areaPx": 900
+          },
+          "gdt": [
+            {
+              "text": "2.94",
+              "ok": false,
+              "kind": "long"
+            },
+            {
+              "text": "2.94",
+              "ok": false,
+              "kind": "short"
+            }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "addon": "GD&T",
+          "pass": false,
+          "detail": "holebig dia=20.07mm ✗(2.5±0.5) · holebig dia=21.10mm ✗(2.5±0.5) · holebig dia=21.17mm ✗(2.5±0.5) · holebig dia=21.50mm ✗(2.5±0.5) · holebig dia=21.17mm ✗(2.5±0.5) · holebig dia=20.28mm ✗(2.5±0.5) · holebig dia=19.93mm ✗(2.5±0.5) · holebig dia=21.17mm ✗(2.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.94mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.75mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.16mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.75mm ✗(8.5±0.5) · box long=2.75mm ✗(18±0.5) · box short=1.96mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.94mm ✗(8.5±0.5)"
+        }
+      ],
+      "reason": "GD&T: holebig dia=20.07mm ✗(2.5±0.5) · holebig dia=21.10mm ✗(2.5±0.5) · holebig dia=21.17mm ✗(2.5±0.5) · holebig dia=21.50mm ✗(2.5±0.5) · holebig dia=21.17mm ✗(2.5±0.5) · holebig dia=20.28mm ✗(2.5±0.5) · holebig dia=19.93mm ✗(2.5±0.5) · holebig dia=21.17mm ✗(2.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.94mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.75mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.16mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.75mm ✗(8.5±0.5) · box long=2.75mm ✗(18±0.5) · box short=1.96mm ✗(8.5±0.5) · box long=2.94mm ✗(18±0.5) · box short=2.94mm ✗(8.5±0.5)",
+      "stepMS": 181
+    }
+  ],
+  "image": "077-2036.jpg"
+}

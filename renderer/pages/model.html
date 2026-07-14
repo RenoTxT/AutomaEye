@@ -252,6 +252,14 @@
             </div>
 
             <div class="card">
+                <div class="section-title">Versi Model (tiap training = versi baru)</div>
+                <div style="padding:12px">
+                    <p class="muted" style="font-size:12px">Tiap training selesai, hasilnya disimpan sebagai <strong>versi baru (v1, v2, …)</strong> tanpa menimpa yang lama — mirip Roboflow. Pilih <strong>versi aktif</strong> di sini; di <strong>Workflow</strong> kamu bisa memilih versi mana yang dipakai per step.</p>
+                    <div id="versionList" class="muted" style="font-size:12px">Belum ada versi (train dulu).</div>
+                </div>
+            </div>
+
+            <div class="card">
                 <div class="section-title">Hyperparameter</div>
                 <div style="padding:12px">
                     <div class="grid-2">
@@ -410,6 +418,7 @@ async function render() {
     const p = await window.api.loadProject(projectName);
     currentModel = p.models.find(m => m.name === modelName);
     if (!currentModel) { alert('Model not found'); return; }
+    renderVersions();
     const stats = await window.api.modelStats(projectName, modelName);
     document.getElementById('title').innerHTML = `${esc(currentModel.name)} <span class="tag">${esc(currentModel.type)}</span>`;
     document.getElementById('meta').innerHTML = `
@@ -794,6 +803,34 @@ async function runSplitOp(fn, isRebuild) {
         document.getElementById('rebuildBtn').disabled = false;
         setTimeout(() => { bar.style.display = 'none'; }, 1500);
     }
+}
+
+// Daftar versi model (v1, v2, …) + tombol set aktif.
+function renderVersions() {
+    const el = document.getElementById('versionList');
+    if (!el) return;
+    const vers = (currentModel && currentModel.versions) || [];
+    if (!vers.length) { el.innerHTML = '<span class="muted">Belum ada versi. Selesaikan satu training → otomatis jadi v1.</span>'; return; }
+    const active = currentModel.activeVersion;
+    el.innerHTML = vers.slice().reverse().map(v => {
+        const mt = v.metrics || {};
+        const met = (mt.mAP != null) ? `mAP50 ${(mt.mAP * 100).toFixed(1)}% · P ${((mt.P || 0) * 100).toFixed(0)}% · R ${((mt.R || 0) * 100).toFixed(0)}%` : '';
+        const d = v.date ? new Date(v.date).toLocaleString() : '';
+        const isActive = v.id === active;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;margin-bottom:4px">
+            <strong>v${v.id}</strong> ${isActive ? '<span style="color:var(--ok);font-size:11px;font-weight:700">● AKTIF</span>' : ''}
+            <span class="muted" style="font-size:11px">${esc(d)}${met ? ' · ' + met : ''}</span>
+            <span style="flex:1"></span>
+            ${isActive ? '' : `<button class="btn small" onclick="useVersion(${v.id})">Pakai versi ini</button>`}
+        </div>`;
+    }).join('');
+}
+async function useVersion(id) {
+    try {
+        await window.api.setActiveVersion(projectName, modelName, id);
+        currentModel.activeVersion = id;
+        renderVersions();
+    } catch (e) { alert('Gagal set versi: ' + e.message); }
 }
 
 async function startTrain() {
@@ -1261,7 +1298,9 @@ function renderAddonRules() {
                         <option value="circle" ${shape === 'circle' ? 'selected' : ''}>Lingkaran (Ø diameter)</option>
                         <option value="rect" ${shape === 'rect' ? 'selected' : ''}>Persegi (panjang × lebar)</option>
                     </select></label>
-                <span class="muted" style="font-size:11px"> — kosongkan nominal = tak dinilai (hanya tampil ukuran)</span>
+                <label style="font-size:11px;margin-left:8px">Jumlah (n)
+                    <input type="number" id="gdt_count_${i}" min="0" step="1" value="${(pc[cls] && pc[cls].count != null) ? pc[cls].count : ''}" style="width:60px" placeholder="mis. 8"></label>
+                <span class="muted" style="font-size:11px"> — kosongkan nominal = tak dinilai; isi n = wajib sekian fitur</span>
                 <div id="gdt_circle_${i}" style="${shape === 'circle' ? '' : 'display:none'}">
                     ${mrow(i, 'dia', 'Diameter (Ø)')}
                 </div>
@@ -1459,6 +1498,8 @@ async function saveAddonRules() {
             const shEl = el(`gdt_shape_${i}`);
             const shape = shEl ? shEl.value : 'rect';
             const spec = { shape };
+            const cnt = num(`gdt_count_${i}`);
+            if (cnt != null && cnt > 0) spec.count = cnt;   // jumlah wajib fitur kelas ini
             // Kelas lingkaran → hanya diameter; persegi → panjang & lebar.
             const kinds = shape === 'circle' ? ['dia'] : ['long', 'short'];
             kinds.forEach(kind => {

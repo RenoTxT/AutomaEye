@@ -1,0 +1,29 @@
+{
+  "seq": 229,
+  "timestamp": "2026-07-14T14:27:52.757Z",
+  "finalVerdict": "NG",
+  "totalMS": 2323,
+  "steps": [
+    {
+      "stepIndex": 1,
+      "category": "Capture",
+      "label": "Kamera / Webcam",
+      "verdict": "OK",
+      "confidence": 0,
+      "reason": "Sumber: kamera · gambar 6KB diterima",
+      "stepMS": 1
+    },
+    {
+      "stepIndex": 2,
+      "category": "Positioning",
+      "modelName": "Presence Detector",
+      "label": "Presence Detector",
+      "verdict": "NG",
+      "confidence": 0,
+      "detections": [],
+      "reason": "Part tidak ditemukan — posisi tidak terkunci",
+      "stepMS": 2318
+    }
+  ],
+  "image": "229-2127.jpg"
+}

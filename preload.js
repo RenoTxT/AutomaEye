@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
     galleryData: (project, model, split) => ipcRenderer.invoke('models:galleryData', { project, model, split }),
     modelStats: (project, model) => ipcRenderer.invoke('models:stats', { project, model }),
     importPtModel: (project, model) => ipcRenderer.invoke('models:importPt', { project, model }),
+    setActiveVersion: (project, model, versionId) => ipcRenderer.invoke('models:setActiveVersion', { project, model, versionId }),
 
     // Dataset
     pickImageFiles: () => ipcRenderer.invoke('dataset:pickFiles'),

@@ -161,8 +161,10 @@ function updatePartInfo() {
     const el = document.getElementById('partInfo');
     if (!el) return;
     if (trackCurrent) {
-        if (!trackCurrent.inspected) {
-            el.innerHTML = `Part <strong>#${trackCurrent.id}</strong> · <span class="muted">menunggu masuk zona…</span>`;
+        if (trackCurrent.verdict === 'WAIT') {
+            el.innerHTML = `Part <strong>#${trackCurrent.id}</strong> · <span style="color:#f59e0b">menunggu fitur lengkap…</span>`;
+        } else if (!trackCurrent.inspected) {
+            el.innerHTML = `Part <strong>#${trackCurrent.id}</strong> · <span class="muted">menunggu berhenti…</span>`;
         } else {
             const col = trackCurrent.verdict === 'OK' ? 'var(--ok)' : 'var(--ng)';
             el.innerHTML = `Part <strong>#${trackCurrent.id}</strong> · <strong style="color:${col}">${trackCurrent.verdict}</strong> (di frame)`;
@@ -688,10 +690,13 @@ async function handleTracking(lite, dataUrl, confVal) {
             if (moved > MOVE_THRESH) trackCurrent.stable = 0;   // masih bergerak/jatuh
             else trackCurrent.stable++;                          // diam bertambah
         }
-        // Inspeksi SEKALI, hanya setelah part DIAM (stabil settleN frame).
+        // Inspeksi setelah part DIAM. Kalau jumlah fitur (n) belum lengkap → ULANGI
+        // tiap frame sampai lengkap (menyerah setelah ~12x → finalize sbg NG).
         if (trackCurrent && !trackCurrent.inspected && trackCurrent.stable >= settleN) {
-            trackCurrent.inspected = true;
-            await inspectPart(dataUrl, confVal);
+            trackCurrent.tries = (trackCurrent.tries || 0) + 1;
+            const force = trackCurrent.tries >= 12;
+            const done = await inspectPart(dataUrl, confVal, force);
+            if (done) trackCurrent.inspected = true;
         }
     } else if (trackCurrent) {
         trackAbsent++;
@@ -713,27 +718,36 @@ async function handleTracking(lite, dataUrl, confVal) {
     updateCountersDOM();
 }
 
-// Inspeksi penuh satu part: ukur → gambar → foto(NG) → open gate → Inspection OFF.
-async function inspectPart(dataUrl, confVal) {
-    logEvent(`Part #${trackCurrent.id} <strong>berhenti</strong> → inspeksi`, 'in');
+// Inspeksi penuh satu part. Return true bila SELESAI (di-finalize), false bila
+// jumlah fitur (n) belum lengkap (menunggu, akan diulang) kecuali force=true.
+async function inspectPart(dataUrl, confVal, force) {
     const mframe = grabDataUrl() || dataUrl;
     let full = lastLite || { steps: [], finalVerdict: 'OK' };
     const mImg = parseInt((document.getElementById('measImgsz') || {}).value);
     const measBox = !!(document.getElementById('measBox') && document.getElementById('measBox').checked);
     try { full = await window.api.inspect(projectName, mframe, { confidence: confVal, light: false, noSignal: true, noSave: true, imgsz: isNaN(mImg) ? undefined : mImg, measureFromBox: measBox }); }
     catch (_) { }
+    const inspStep = (full.steps || []).find(s => s.category === 'Inspection' && !s.skipped);
+    const incomplete = !!(inspStep && inspStep.incomplete);
+    // Selalu tampilkan overlay (partial atau lengkap).
+    measureResult = full; measureFrame = mframe; lastFull = full;
+    drawTracking(full); renderStepsAndSL(full);
+
+    if (incomplete && !force) {
+        // Belum lengkap → JANGAN finalize. Tunggu & ulangi frame berikutnya.
+        if (trackCurrent) trackCurrent.verdict = 'WAIT';
+        updatePartInfo();
+        logEvent(`Part #${trackCurrent ? trackCurrent.id : '?'} menunggu fitur lengkap — ${esc((inspStep && inspStep.reason) || '')}`, 'sig');
+        return false;
+    }
+
+    // LENGKAP (atau menyerah) → finalize: hitung, foto NG, sinyal.
     const verdict = full.finalVerdict;
     if (trackCurrent) trackCurrent.verdict = verdict;
     total++; if (verdict === 'OK') okCount++; else ngCount++;
-    // Gambar layer ukuran (biar foto & tampilan benar).
-    measureResult = full; measureFrame = mframe; lastFull = full;
-    drawTracking(full);
-    renderStepsAndSL(full);
     updatePartInfo(); updateCountersDOM();
-    const inspStep = (full.steps || []).find(s => s.category === 'Inspection' && !s.skipped);
     const reason = inspStep && inspStep.reason ? ` — ${esc(inspStep.reason)}` : '';
-    logEvent(`Socket Measurement: verdict <strong>${verdict}</strong>${reason}`, verdict === 'OK' ? 'ok' : 'ng');
-    // Foto ber-overlay HANYA bila NG.
+    logEvent(`Measurement: verdict <strong>${verdict}</strong>${reason}`, verdict === 'OK' ? 'ok' : 'ng');
     if (verdict === 'NG') {
         try {
             const annotated = await renderAnnotatedDataUrl(measureFrame, full);
@@ -743,11 +757,11 @@ async function inspectPart(dataUrl, confVal) {
     } else {
         logEvent(`OK — foto tidak disimpan`, 'ok');
     }
-    // Langsung open gate (tanpa hold), lalu Inspection OFF.
     await sendGate('open');
     measureResult = null;
     drawTracking(lastLite);
     renderStepsAndSL(lastLite);
+    return true;
 }
 
 // Kotak presence terbesar (part utama) dari hasil — untuk pantau gerak/diam.
