@@ -2,7 +2,7 @@
   "name": "SH1160",
   "description": "AI detection untuk Socket Holder 1160",
   "createdAt": "2026-07-11T03:07:48.055Z",
-  "updatedAt": "2026-07-14T16:37:43.646Z",
+  "updatedAt": "2026-07-14T16:41:52.683Z",
   "models": [
     {
       "name": "Object Detector",
@@ -214,7 +214,8 @@
         "modelName": "Presence Detector",
         "category": "Positioning",
         "continueOn": "always",
-        "stepIndex": 2
+        "stepIndex": 2,
+        "version": 1
       },
       {
         "modelName": "Measurement",

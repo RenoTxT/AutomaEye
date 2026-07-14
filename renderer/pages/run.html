@@ -116,6 +116,7 @@ document.getElementById('backLink').onclick = () => window.api.goTo(`project.htm
 
 const CATEGORIES = ['Capture', 'Positioning', 'Inspection', 'Communication', 'Options'];
 let stream = null;
+let camDeviceId = null;     // deviceId kamera aktif (untuk re-acquire saat drop)
 let total = 0, okCount = 0, ngCount = 0, msSum = 0, frameCount = 0;
 
 // ---- Tracking / part indexing ----
@@ -228,11 +229,31 @@ function renderPalette(latestResult) {
     }).join('');
 }
 
+// Constraint kamera yang tahan-banting: pakai 'ideal' (bukan 'exact') supaya webcam
+// murah tidak gagal, kunci ke deviceId yang sama, dan batasi frameRate.
+async function camConstraints() {
+    const v = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+    if (camDeviceId) v.deviceId = { ideal: camDeviceId };
+    return { video: v, audio: false };
+}
+
+function attachTrackGuards() {
+    const track = stream && stream.getVideoTracks()[0];
+    if (!track) return;
+    camDeviceId = track.getSettings().deviceId || camDeviceId;
+    // Kalau driver/USB men-drop kamera → 'ended'/'mute' → pulihkan otomatis.
+    track.onended = () => scheduleRecover('track ended');
+    track.onmute  = () => scheduleRecover('track mute');
+}
+
 async function startCam() {
     try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        stream = await navigator.mediaDevices.getUserMedia(await camConstraints());
         const video = document.getElementById('cam');
         video.srcObject = stream;
+        video.muted = true; video.playsInline = true;
+        await video.play().catch(() => {});
+        attachTrackGuards();
         video.style.display = 'block';
         document.getElementById('noSignal').style.display = 'none';
         document.getElementById('snapImg').style.display = 'none';
@@ -240,12 +261,64 @@ async function startCam() {
         document.getElementById('captureBtn').disabled = false;
         document.getElementById('liveBtn').disabled = false;
         document.getElementById('stopBtn').disabled = false;
+        startCamWatchdog();
     } catch (e) { alert('Camera error: ' + e.message); }
 }
 
+// ---- Pemulihan kamera otomatis (anti black-screen / kamera ter-drop) ----
+let camRecovering = false;
+function scheduleRecover(reason) {
+    if (camRecovering || !stream) return;
+    console.warn('camera recover:', reason);
+    recoverCamera(reason);
+}
+async function recoverCamera(reason) {
+    if (camRecovering) return;
+    camRecovering = true;
+    const note = document.getElementById('noSignal');
+    if (note) { note.style.display = 'block'; note.textContent = 'Kamera terputus — menyambung ulang…'; }
+    try {
+        try { stream?.getTracks().forEach(t => { t.onended = null; t.onmute = null; t.stop(); }); } catch {}
+        const video = document.getElementById('cam');
+        let ok = false;
+        for (let i = 0; i < 5 && !ok; i++) {
+            await new Promise(r => setTimeout(r, 400));   // beri waktu device lepas
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(await camConstraints());
+                video.srcObject = stream;
+                video.muted = true; video.playsInline = true;
+                await video.play().catch(() => {});
+                attachTrackGuards();
+                ok = true;
+            } catch (e) { /* device belum siap, coba lagi */ }
+        }
+        if (ok && note) { note.style.display = 'none'; }
+        else if (note) { note.textContent = 'Kamera tidak terdeteksi — cek kabel USB lalu tekan Start Camera.'; }
+    } finally { camRecovering = false; }
+}
+
+// Pemantau: deteksi kamera macet/mati lalu picu pemulihan.
+let camWatchdog = null, camStallCount = 0, lastVideoTime = -1;
+function startCamWatchdog() {
+    stopCamWatchdog();
+    camStallCount = 0; lastVideoTime = -1;
+    camWatchdog = setInterval(() => {
+        const video = document.getElementById('cam');
+        if (!video || !stream || camRecovering) return;
+        const track = stream.getVideoTracks()[0];
+        if (track && (track.readyState === 'ended' || track.muted)) { scheduleRecover('watchdog: track mati'); return; }
+        if (!video.videoWidth || video.currentTime === lastVideoTime) {
+            if (++camStallCount >= 3) { camStallCount = 0; scheduleRecover('watchdog: frame macet'); }
+        } else camStallCount = 0;
+        lastVideoTime = video.currentTime;
+    }, 1500);
+}
+function stopCamWatchdog() { if (camWatchdog) { clearInterval(camWatchdog); camWatchdog = null; } }
+
 function stopCam() {
     if (live) toggleLive();                       // matikan live dulu
-    stream?.getTracks().forEach(t => t.stop());
+    stopCamWatchdog();
+    stream?.getTracks().forEach(t => { t.onended = null; t.onmute = null; t.stop(); });
     const sv = document.getElementById('snapView'); if (sv) sv.style.display = 'none';
     const lo = document.getElementById('liveOverlay'); if (lo) lo.style.display = 'none';
     document.getElementById('cam').style.display = 'none';
@@ -259,12 +332,16 @@ function stopCam() {
 let live = false, liveTimer = null, busy = false, revertTimer = null;
 
 let fpsSamples = [];
-// Loop KONTINU: presence jalan terus tanpa jeda antar-siklus.
+// Loop KONTINU: presence jalan terus, TAPI dengan jeda minimum + 1 frame repaint
+// tiap siklus supaya pipeline kamera & compositor tidak kelaparan (penyebab black-screen).
+const LIVE_MIN_CYCLE_MS = 45;
 async function liveLoop() {
     if (!live) return;
+    const t0 = performance.now();
     await inspectFrame();
     if (!live) return;
-    liveTimer = setTimeout(liveLoop, 0);
+    const wait = Math.max(LIVE_MIN_CYCLE_MS - (performance.now() - t0), 8);
+    liveTimer = setTimeout(() => { if (live) requestAnimationFrame(liveLoop); }, wait);
 }
 function updateFps(cycleMs, result) {
     fpsSamples.push(cycleMs); if (fpsSamples.length > 8) fpsSamples.shift();
